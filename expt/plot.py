@@ -2,8 +2,12 @@
 Plotting behavior (matplotlib, hvplot, etc.) for expt.data
 """
 
+import warnings
+from typing import Union, Iterable, Iterator, Optional, List
+
 import numpy as np
-from typing import Union, Iterable, Iterator, Optional
+import pandas as pd
+from scipy import interpolate
 
 from matplotlib.axes import Axes
 
@@ -29,17 +33,51 @@ class HypothesisPlotter:
         return self._parent.grouped
 
     @property
-    def columns(self):
-        return self._parent.columns
+    def _dataframes(self) -> List[pd.DataFrame]:
+        return self._parent._dataframes
+
+    def interpolate_and_average(
+        self,
+        df_list: List[pd.DataFrame],
+        n_samples: int,
+        x_column: Optional[str],
+    ) -> pd.DataFrame:
+
+        # for each df, interpolate on 'x'
+        x_series = pd.concat([
+            (pd.Series(df.index) if x_column is None else df[x_column])
+            for df in df_list])
+        x_min = x_series.min()
+        x_max = x_series.max()
+        x_samples = np.linspace(x_min, x_max, num=n_samples)
+
+        # get interpolated dataframes
+        df_interp_list = []
+        for df in df_list:
+            if x_column is not None:
+                df = df.set_index(x_column)
+            df_interp = df.apply(lambda y_series: interpolate.interp1d(df.index, y_series, bounds_error=False)(x_samples))
+            df_interp[x_column] = x_samples
+            df_interp.set_index(x_column, inplace=True)
+            df_interp_list.append(df_interp)
+
+        # have individual interpolation data for each run cached (for the last call).
+        self._df_interp_list = df_interp_list
+
+        grouped = pd.concat(df_interp_list, sort=False).groupby(level=0)
+        mean, std = grouped.mean(), grouped.std()
+
+        return mean, std
 
     def __call__(self, *args,
                  subplots=True,
-                 std_alpha=0.2, runs_alpha=False,
+                 std_alpha=0.2, runs_alpha=None,
+                 n_samples=None,
                  rolling=None,
                  **kwargs):
         '''
         Hypothesis.plot based on matplotlib.
-        see DataFrame.plot()
+        see DataFrame.plot() for available keyword arguments.
 
         This can work in two different modes:
         (1) Plot (several or all) columns as separate subplots (subplots=True)
@@ -47,16 +85,49 @@ class HypothesisPlotter:
 
         Additional keyword arguments:
             - rolling (int): A window size for rolling and smoothing.
+            - n_samples (int): If given, we subsample using n_samples number of
+              equidistant points over the x axis. Values will be interpolated.
             - std_alpha (float): If not None, will show the 1-std range as a
               shaded area. Defaults 0.2 (enabled).
             - runs_alpha (float): If not None, will draw an individual line
               for each run. Defaults None (disabled), recommend value 0.2.
         '''
-        mean, std = self.grouped.mean(), self.grouped.std()
+        if len(self.runs) == 0:
+            # nothing to plot, do nothing
+            return
+
+        if 'x' not in kwargs:
+            # index (same across runs) being x value, so we can simply average
+            mean, std = self.grouped.mean(), self.grouped.std()
+        else:
+            # might have different x values --- we need to interpolate.
+            # (i) check if the x-column is consistent?
+            if n_samples is None and np.any(self.grouped.nunique()[kwargs['x']] > 1):
+                warnings.warn(
+                    f"The x value (column `{kwargs['x']}`) is not consistent "
+                    "over different runs. Automatically falling back to the "
+                    "subsampling and interpolation mode (n_samples=10000). "
+                    "Explicitly setting the `n_samples` parameter is strongly "
+                    "recommended.", UserWarning
+                )
+                n_samples = 10000
+            else:
+                mean, std = self.grouped.mean(), self.grouped.std()
+
+        if n_samples is not None:
+            # subsample by interpolation, then average.
+            mean, std = self.interpolate_and_average(
+                self._dataframes, n_samples=n_samples,
+                x_column=kwargs.get('x', None),
+            )
+            # Now that the index of group-averaged dataframes are the x samples
+            # we interpolated on, we can let DataFrame.plot use them as index
+            if 'x' in kwargs:
+                del kwargs['x']
 
         # determine which columns to draw (i.e. y) before smoothing.
         # should only include numerical values
-        y: Iterable[str] = kwargs.get('y', self.columns)
+        y: Iterable[str] = kwargs.get('y', mean.columns)
         if isinstance(y, str): y = [y]
         if 'x' in kwargs:
             y = [yi for yi in y if yi != kwargs['x']]
@@ -95,11 +166,15 @@ class HypothesisPlotter:
             if not kwargs.get('title', None):
                 kwargs['title'] = self.name
 
+        if isinstance(kwargs.get('ax', None), np.ndarray) and 'layout' in kwargs:
+            # avoid matplotlib warning: when multiple axes are passed,
+            # layout are ignored.
+            del kwargs['layout']
         axes = mean.plot(*args, subplots=subplots, **kwargs)
 
         if std_alpha is not None:
             # show shadowed range of 1-std errors
-            for ax, yi in zip(axes.flat, y):
+            for ax, yi in zip(np.asarray(axes).flat, y):
                 mean_line = ax.get_lines()[-1]
                 ax.fill_between((mean - std)[yi].index,
                                 (mean - std)[yi].values,
@@ -109,15 +184,18 @@ class HypothesisPlotter:
 
         if runs_alpha and len(self.runs) > 1:
             # show individual runs
-            for ax, yi in zip(axes.flat, y):
+            for ax, yi in zip(np.asarray(axes).flat, y):
                 x = kwargs.get('x', None)
                 color = ax.get_lines()[-1].get_color()
-                for r in self.runs:
-                    r_df = r.df
+
+                df_individuals = self._df_interp_list if n_samples \
+                    else self._dataframes
+
+                for df in df_individuals:
                     if rolling:
-                        r_df = r_df.rolling(rolling, min_periods=1, center=True).mean()
-                    r_df.plot(ax=ax, x=x, y=yi, legend=False, color=color,
-                              alpha=runs_alpha)
+                        df = df.rolling(rolling, min_periods=1, center=True).mean()
+                    df.plot(ax=ax, x=x, y=yi, legend=False, color=color,
+                            alpha=runs_alpha)
 
         # some sensible styling (grid, tight_layout)
         axes_arr = np.asarray(axes).flat
@@ -126,7 +204,6 @@ class HypothesisPlotter:
         fig = axes_arr[0].get_figure()
         fig.tight_layout()
         return axes
-
 
 
 class ExperimentPlotter:
@@ -191,4 +268,3 @@ class ExperimentPlotter:
             ax.set_ylabel(kwargs['y'])
 
         return ax
-

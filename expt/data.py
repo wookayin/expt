@@ -149,10 +149,15 @@ class Hypothesis(Iterable[Run]):
 
     @property
     def grouped(self) -> 'DataFrameGroupBy':
+        return pd.concat(self._dataframes, sort=False).groupby(level=0)
+
+    @property
+    def _dataframes(self) -> List[pd.DataFrame]:
+        """Get all dataframes associated with all the runs."""
         def _get_df(o):
             if isinstance(o, pd.DataFrame): return o
             else: return o.df
-        return pd.concat(_get_df(r) for r in self.runs).groupby(level=0)
+        return [_get_df(r) for r in self.runs]
 
     @property
     def columns(self) -> Iterable[str]:
@@ -185,6 +190,9 @@ class Experiment(Iterable[Hypothesis]):
         self._title = title
         self._hypotheses: MutableMapping[str, Hypothesis] = collections.OrderedDict()
 
+        if isinstance(hypotheses, np.ndarray):
+            hypotheses = list(hypotheses)
+
         for h in (hypotheses or []):
             if h.name in self._hypotheses:
                 raise ValueError(f"Duplicate hypothesis name: `{h.name}`")
@@ -209,18 +217,23 @@ class Experiment(Iterable[Hypothesis]):
             return [Run.of(r) for r in runs]
         runs = check_runs_type(runs)
 
-        if hypothesis_name in self._hypotheses:
-            d: Hypothesis = self._hypotheses[hypothesis_name]
-            d.runs.extend(runs)
+        d = Hypothesis(name=hypothesis_name, runs=runs)
+        return self.add_hypothesis(d, extend_if_conflict=True)
 
+    @typechecked
+    def add_hypothesis(self, h: Hypothesis,
+                       extend_if_conflict=False,
+                       ) -> Hypothesis:
+        if h.name in self._hypotheses:
+            if not extend_if_conflict:
+                raise ValueError(f"Hypothesis named {h.name} already exists!")
+
+            d: Hypothesis = self._hypotheses[h.name]
+            d.runs.extend(h.runs)
         else:
-            d = Hypothesis(name=hypothesis_name, runs=runs)
-            if color: d['color'] = color
-            if linestyle: d['linestyle'] = linestyle
+            self._hypotheses[h.name] = h
 
-            self._hypotheses[hypothesis_name] = d
-
-        return self._hypotheses[hypothesis_name]
+        return self._hypotheses[h.name]
 
     @property
     def name(self) -> str:
@@ -273,6 +286,13 @@ class Experiment(Iterable[Hypothesis]):
         else:
             # TODO metadata (e.g. color)
             self.add_runs(name, hypothesis_or_runs)
+
+    @property
+    def columns(self) -> Iterable[str]:
+        y = set()
+        for h in self._hypotheses.values():
+            y.update(h.columns)
+        return list(y)
 
     def hvplot(self, *args, **kwargs):
         plot = None
