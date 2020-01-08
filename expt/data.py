@@ -43,8 +43,7 @@ from pandas.core.accessor import CachedAccessor
 
 from dataclasses import dataclass      # for python 3.6, backport needed
 
-from . import util
-from . import plot
+from . import plot as _plot
 
 
 #########################################################################
@@ -134,18 +133,12 @@ class Hypothesis(Iterable[Run]):
     def describe(self):
         raise NotImplementedError
 
-    def hvplot(self, *args, subplots=True, **kwargs):
-        mean, std = self.grouped.mean(), self.grouped.std()
-        if subplots:
-            # TODO implement various options.
-            p = mean.hvplot(shared_axes=False, subplots=True, **kwargs)
-        else:
-            # TODO implement this version
-            raise NotImplementedError
-        return p
-
     # see module expt.plot
-    plot = CachedAccessor("plot", plot.HypothesisPlotter)
+    plot = CachedAccessor("plot", _plot.HypothesisPlotter)
+    plot.__doc__ = _plot.HypothesisPlotter.__doc__
+
+    hvplot = CachedAccessor("hvplot", _plot.HypothesisHvPlotter)
+    hvplot.__doc__ = _plot.HypothesisHvPlotter.__doc__
 
     @property
     def grouped(self) -> 'DataFrameGroupBy':
@@ -177,7 +170,6 @@ class Hypothesis(Iterable[Run]):
 
     def max(self, *args, **kwargs) -> pd.DataFrame:
         return self.grouped.max(*args, **kwargs)
-
 
 
 class Experiment(Iterable[Hypothesis]):
@@ -301,8 +293,8 @@ class Experiment(Iterable[Hypothesis]):
             plot = (plot * p) if plot else p
         return plot
 
-
-    plot = CachedAccessor("plot", plot.ExperimentPlotter)
+    plot = CachedAccessor("plot", _plot.ExperimentPlotter)
+    plot.__doc__ = _plot.ExperimentPlotter.__doc__
 
 
 #########################################################################

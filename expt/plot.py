@@ -3,7 +3,7 @@ Plotting behavior (matplotlib, hvplot, etc.) for expt.data
 """
 
 import warnings
-from typing import Union, Iterable, Iterator, Optional, List
+from typing import Union, Iterable, Iterator, Optional, List, Dict
 
 import numpy as np
 import pandas as pd
@@ -77,7 +77,6 @@ class HypothesisPlotter:
                  **kwargs):
         '''
         Hypothesis.plot based on matplotlib.
-        see DataFrame.plot() for available keyword arguments.
 
         This can work in two different modes:
         (1) Plot (several or all) columns as separate subplots (subplots=True)
@@ -91,6 +90,11 @@ class HypothesisPlotter:
               shaded area. Defaults 0.2 (enabled).
             - runs_alpha (float): If not None, will draw an individual line
               for each run. Defaults None (disabled), recommend value 0.2.
+
+        All other kwargs is passed to DataFrame.plot(). For example, you may
+        find the following parameters useful:
+            `x`, `y`, `layout`, `figsize`, `ax`, `legend`, etc.
+
         '''
         if len(self.runs) == 0:
             # nothing to plot, do nothing
@@ -127,7 +131,7 @@ class HypothesisPlotter:
 
         # determine which columns to draw (i.e. y) before smoothing.
         # should only include numerical values
-        y: Iterable[str] = kwargs.get('y', mean.columns)
+        y: Iterable[str] = kwargs.get('y', None) or mean.columns
         if isinstance(y, str): y = [y]
         if 'x' in kwargs:
             y = [yi for yi in y if yi != kwargs['x']]
@@ -137,6 +141,23 @@ class HypothesisPlotter:
             mean = mean.rolling(rolling, min_periods=1, center=True).mean()
             std = std.rolling(rolling, min_periods=1, center=True).mean()
 
+        return self._do_plot(y, mean, std, n_samples=n_samples,
+                             subplots=subplots, rolling=rolling,
+                             std_alpha=std_alpha, runs_alpha=runs_alpha,
+                             args=args, kwargs=kwargs)
+
+    def _do_plot(self,
+                 y: List[str],
+                 mean: pd.DataFrame,
+                 std: pd.DataFrame,
+                 n_samples: Optional[int],
+                 subplots: bool,
+                 rolling: Optional[int],
+                 std_alpha: Optional[float],
+                 runs_alpha: Optional[float],
+                 args: List,
+                 kwargs: Dict,
+                 ):
         # Fill-in sensible defaults.
         if subplots:  # mode (1) -- separate subplots
             title = list(y)
@@ -199,11 +220,64 @@ class HypothesisPlotter:
 
         # some sensible styling (grid, tight_layout)
         axes_arr = np.asarray(axes).flat
-        for ax in axes_arr:
-            ax.grid(which='both', alpha=0.5)
+        if kwargs.get('grid', True):
+            for ax in axes_arr:
+                ax.grid(which='both', alpha=0.5)
         fig = axes_arr[0].get_figure()
         fig.tight_layout()
         return axes
+
+
+class HypothesisHvPlotter(HypothesisPlotter):
+
+    def _do_plot(self,
+                 y: List[str],
+                 mean: pd.DataFrame,
+                 std: pd.DataFrame,
+                 n_samples: Optional[int],
+                 subplots: bool,
+                 rolling: Optional[int],
+                 std_alpha: Optional[float],
+                 runs_alpha: Optional[float],
+                 args: List,
+                 kwargs: Dict,
+                 ):
+
+        if subplots:
+            kwargs['legend'] = False
+
+            # TODO implement various options for hvplot.
+            p = mean.hvplot(shared_axes=False, subplots=True, **kwargs)
+
+            # Display a single legend without duplication
+            next(iter(p.data.values())).opts('Curve', show_legend=True)
+        else:
+            # TODO implement this version
+            raise NotImplementedError
+
+        if std_alpha is not None:
+            band_lower = mean - std
+            band_lower['_facet'] = 'lower'
+            band_upper = mean + std
+            band_upper['_facet'] = 'upper'
+            band = pd.concat([band_lower.add_suffix('.min'),
+                              band_upper.add_suffix('.max')], axis=1)
+            x_col = kwargs.get('x', None)
+            if x_col:
+                x_col += '.min'
+
+            # for each subplot (one for each y variable), display error band
+            for k in p.data.keys():
+                yi = k[0]
+                area_fill = band.hvplot.area(
+                    x=x_col,
+                    y=yi + '.min', y2=yi + '.max',
+                    legend=False, line_width=0, hover=False,
+                    alpha=std_alpha,
+                )
+                p.data[k] = p.data[k] * area_fill   # overlay 1-std err range
+
+        return p
 
 
 class ExperimentPlotter:
@@ -268,3 +342,8 @@ class ExperimentPlotter:
             ax.set_ylabel(kwargs['y'])
 
         return ax
+
+
+HypothesisPlotter.__doc__ = HypothesisPlotter.__call__.__doc__
+HypothesisHvPlotter.__doc__ = HypothesisHvPlotter.__call__.__doc__
+ExperimentPlotter.__doc__ = ExperimentPlotter.__call__.__doc__
