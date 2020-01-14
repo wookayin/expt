@@ -3,7 +3,8 @@ Plotting behavior (matplotlib, hvplot, etc.) for expt.data
 """
 
 import warnings
-from typing import Union, Iterable, Iterator, Optional, List, Dict
+from typing import Union, Iterable, Iterator, Optional
+from typing import Tuple, List, Dict
 
 import numpy as np
 import pandas as pd
@@ -41,7 +42,7 @@ class HypothesisPlotter:
         df_list: List[pd.DataFrame],
         n_samples: int,
         x_column: Optional[str],
-    ) -> pd.DataFrame:
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
         # for each df, interpolate on 'x'
         x_series = pd.concat([
@@ -56,7 +57,15 @@ class HypothesisPlotter:
         for df in df_list:
             if x_column is not None:
                 df = df.set_index(x_column)
-            df_interp = df.apply(lambda y_series: interpolate.interp1d(df.index, y_series, bounds_error=False)(x_samples))
+
+            def _interpolate_if_numeric(y_series):
+                if y_series.dtype.kind in ('i', 'f'):
+                    return interpolate.interp1d(df.index, y_series, bounds_error=False)(x_samples)
+                else:
+                    # maybe impossible to interpolate (i.e. object), skip it.
+                    # (this column will be filtered out later on)
+                    return pd.Series(np.empty_like(x_samples, dtype=object))
+            df_interp = df.apply(_interpolate_if_numeric)
             df_interp[x_column] = x_samples
             df_interp.set_index(x_column, inplace=True)
             df_interp_list.append(df_interp)
@@ -164,7 +173,7 @@ class HypothesisPlotter:
             color = [kwargs.get('color', '#1f77b4')] * len(y)
             label = util.prettify_labels([self.name or ''] * len(y))
 
-            # TDOO: layout -> grid
+            # TODO: layout -> grid
             kwargs.update(dict(y=y, title=title,
                                color=color, label=label))
 
@@ -247,10 +256,13 @@ class HypothesisHvPlotter(HypothesisPlotter):
             kwargs['legend'] = False
 
             # TODO implement various options for hvplot.
-            p = mean.hvplot(shared_axes=False, subplots=True, **kwargs)
+            kwargs.update(dict(y=y))
+            p = mean.hvplot(shared_axes=False, subplots=True,
+                            **kwargs)
 
             # Display a single legend without duplication
-            next(iter(p.data.values())).opts('Curve', show_legend=True)
+            if isinstance(p.data, dict):
+                next(iter(p.data.values())).opts('Curve', show_legend=True)
         else:
             # TODO implement this version
             raise NotImplementedError
@@ -267,16 +279,38 @@ class HypothesisHvPlotter(HypothesisPlotter):
                 x_col += '.min'
 
             # for each subplot (one for each y variable), display error band
-            for k in p.data.keys():
-                yi = k[0]
-                area_fill = band.hvplot.area(
+            from holoviews.core.overlay import Overlayable
+            def _overlay_area(yi):
+                return band.hvplot.area(
                     x=x_col,
                     y=yi + '.min', y2=yi + '.max',
                     legend=False, line_width=0, hover=False,
                     alpha=std_alpha,
                 )
-                p.data[k] = p.data[k] * area_fill   # overlay 1-std err range
 
+            if isinstance(p.data, pd.DataFrame):
+                # single plot rather than multiple subplots:sp
+                p = p * _overlay_area(y[0])
+
+            else:
+                # subplots (see y for the list of subplots)
+                for k in p.data.keys():
+                    yi = k if isinstance(k, str) else k[0]
+                    assert isinstance(yi, str)
+                    if yi not in y:
+                        continue
+
+                    area_fill = band.hvplot.area(
+                        x=x_col,
+                        y=yi + '.min', y2=yi + '.max',
+                        legend=False, line_width=0, hover=False,
+                        alpha=std_alpha,
+                    ).opts(show_legend=False)
+
+                    assert isinstance(p.data[k], Overlayable), str(type(p.data[k]))
+                    p.data[k] = p.data[k] * area_fill   # overlay 1-std err range
+
+        # TODO: runs_alpha and rolling
         return p
 
 

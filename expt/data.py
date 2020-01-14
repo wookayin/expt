@@ -26,7 +26,7 @@ of hypotheses or algorithms applied over different environments or dataset).
 
 import collections
 from typing import Union, Iterable, Iterator, Optional
-from typing import List, Tuple, MutableMapping
+from typing import List, Tuple, Set, MutableMapping
 from typeguard import typechecked
 
 import sys
@@ -200,7 +200,7 @@ class Experiment(Iterable[Hypothesis]):
                  linestyle=None,
                  ) -> Hypothesis:
 
-        def check_runs_type(runs) -> List[pd.DataFrame]:
+        def check_runs_type(runs) -> List[Run]:
             if isinstance(runs, types.GeneratorType):
                 runs = list(runs)
             if runs == []: return []
@@ -279,9 +279,12 @@ class Experiment(Iterable[Hypothesis]):
             # TODO metadata (e.g. color)
             self.add_runs(name, hypothesis_or_runs)
 
+        return self._hypotheses[name]
+
+
     @property
     def columns(self) -> Iterable[str]:
-        y = set()
+        y: Set[str] = set()
         for h in self._hypotheses.values():
             y.update(h.columns)
         return list(y)
@@ -401,12 +404,10 @@ def parse_run_tensorboard(run_folder, fillna=False,
     return pd.DataFrame(all_data).T
 
 
-def get_runs_serial(*path_globs, verbose=False, fillna=True) -> List[Run]:
+def iter_runs_serial(*path_globs, verbose=False, fillna=True) -> Iterator[Run]:
     """
-    Get a list of Run objects from the given path(s).
-    Runs in single-thread (slow, should not used outside debugging purposes).
+    Enumerate Run objects from the given path(s).
     """
-    hits = 0
     for path_glob in path_globs:
         if verbose:
             sys.stderr.write(f"get_runs: {str(path_glob)}\n")
@@ -415,14 +416,23 @@ def get_runs_serial(*path_globs, verbose=False, fillna=True) -> List[Run]:
         for p in paths:
             try:
                 df = parse_run(p, verbose=verbose, fillna=fillna)
-                hits += 1
                 yield Run(p, df)
             except (pd.errors.EmptyDataError, FileNotFoundError) as e:
                 sys.stderr.write(f"[!] {p} : {e}\n")
 
-    if not hits:
+
+def get_runs_serial(*path_globs, verbose=False, fillna=True) -> List[Run]:
+    """
+    Get a list of Run objects from the given path(s).
+    Works in single-thread (slow, should not used outside debugging purposes).
+    """
+    runs = list(iter_runs_serial(*path_globs, verbose=verbose, fillna=fillna))
+
+    if not runs:
         for path_glob in path_globs:
             sys.stderr.write(f"Warning: No match found for pattern {path_glob}\n")
+
+    return runs
 
 
 def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
