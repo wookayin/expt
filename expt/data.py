@@ -33,8 +33,6 @@ import sys
 import types
 import os.path
 import pprint
-from glob import glob
-from pathlib import Path
 from multiprocessing.pool import ThreadPool
 
 import pandas as pd
@@ -44,6 +42,7 @@ from pandas.core.accessor import CachedAccessor
 from dataclasses import dataclass      # for python 3.6, backport needed
 
 from . import plot as _plot
+from .path_util import glob, exists, open
 
 
 #########################################################################
@@ -348,16 +347,18 @@ def parse_run_progresscsv(run_folder, fillna=False,
     """
     df = None
     for fname in ('progress.csv', 'log.csv'):
-        p = Path(run_folder) / fname
-        if p.exists():
-            df = pd.read_csv(p)
+        p = os.path.join(run_folder, fname)
+        if exists(p):
+            with open(p, mode='r') as f:
+                df = pd.read_csv(f)
             break
 
-    if df is None and Path(run_folder).exists():
+    if df is None and exists(run_folder):
+        # maybe a direct file path.
         df = pd.read_csv(run_folder)
 
     if df is None:
-        raise FileNotFoundError(run_folder + "progress.csv")
+        raise FileNotFoundError(os.path.join(run_folder, "progress.csv"))
 
     if fillna:
         df = df.fillna(0)
