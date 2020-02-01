@@ -83,6 +83,7 @@ class HypothesisPlotter:
                  std_alpha=0.2, runs_alpha=None,
                  n_samples=None,
                  rolling=None,
+                 ignore_unknown: bool = False,
                  **kwargs):
         '''
         Hypothesis.plot based on matplotlib.
@@ -144,7 +145,25 @@ class HypothesisPlotter:
         if isinstance(y, str): y = [y]
         if 'x' in kwargs:
             y = [yi for yi in y if yi != kwargs['x']]
-        y = [yi for yi in y if mean.dtypes[yi].kind in ('i', 'f')]
+
+        def _should_include_column(col_name: str) -> bool:
+            if not col_name:   # empty name
+                return False
+
+            # unknown column in the DataFrame
+            if col_name not in mean.dtypes:
+                if ignore_unknown:
+                    return False   # just ignore, no error
+                else:
+                    raise ValueError(f"Unknown column name '{col_name}'. "
+                                     "Available columns: {}".format(
+                                         list(mean.columns)))
+
+            # include only numeric values (integer or float)
+            if not (mean.dtypes[col_name].kind in ('i', 'f')):
+                return False
+            return True
+        y = [yi for yi in y if _should_include_column(yi)]
 
         if rolling:
             mean = mean.rolling(rolling, min_periods=1, center=True).mean()

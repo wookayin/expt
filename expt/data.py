@@ -175,10 +175,10 @@ class Experiment(Iterable[Hypothesis]):
 
     @typechecked
     def __init__(self,
-                 title: str = "",
+                 title: Optional[str] = None,
                  hypotheses: Iterable[Hypothesis] = None,
                  ):
-        self._title = title
+        self._title = title or "Experiment"
         self._hypotheses: MutableMapping[str, Hypothesis] = collections.OrderedDict()
 
         if isinstance(hypotheses, np.ndarray):
