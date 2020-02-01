@@ -29,6 +29,9 @@ def glob(pattern):
     (i.e., gs://...) path via gfile.glob(...).
     """
     if pattern.startswith('gs://'):
+        # Bug: GCP glob does not match any directory on trailing slashes.
+        # https://github.com/GoogleCloudPlatform/gsutil/issues/444
+        pattern = pattern.rstrip('/')
         return _import_gfile().glob(pattern)  # noqa
     else:
         return local_glob(pattern)

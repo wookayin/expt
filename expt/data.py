@@ -311,8 +311,8 @@ def parse_run(run_folder, fillna=False,
     """
     if verbose:
         # TODO Use python logging
-        sys.stderr.write(f"Reading {run_folder} ...\n")
-        sys.stderr.flush()
+        print(f"Reading {run_folder} ...",
+              file=sys.stderr, flush=True)
 
     # make it more general (rather than being specific to progress.csv)
     # and support tensorboard eventlog files, etc.
@@ -328,8 +328,7 @@ def parse_run(run_folder, fillna=False,
                 break
         except (FileNotFoundError, IOError) as e:
             if verbose:
-                sys.stderr.write(f"{fn.__name__} -> {e}\n")
-                sys.stderr.flush()
+                print(f"{fn.__name__} -> {e}\n", file=sys.stderr, flush=True)
     else:
         raise pd.errors.EmptyDataError(f"Cannot handle dir: {run_folder}")
 
@@ -355,7 +354,8 @@ def parse_run_progresscsv(run_folder, fillna=False,
 
     if df is None and exists(run_folder):
         # maybe a direct file path.
-        df = pd.read_csv(run_folder)
+        with open(p, mode='r') as f:
+            df = pd.read_csv(f)
 
     if df is None:
         raise FileNotFoundError(os.path.join(run_folder, "progress.csv"))
@@ -378,7 +378,8 @@ def parse_run_tensorboard(run_folder, fillna=False,
         raise pd.errors.EmptyDataError(f"No event file detected in {run_folder}")
     event_file = event_file[-1]  # pick the last one
     if verbose:
-        print(f"Reading {event_file} ...")
+        print(f"Reading TF event file: {event_file} ...",
+              file=sys.stderr, flush=True)
 
     import tensorflow as tf
     from collections import defaultdict
@@ -411,7 +412,7 @@ def iter_runs_serial(*path_globs, verbose=False, fillna=True) -> Iterator[Run]:
     """
     for path_glob in path_globs:
         if verbose:
-            sys.stderr.write(f"get_runs: {str(path_glob)}\n")
+            print(f"get_runs: {str(path_glob)}", file=sys.stderr)
 
         paths = list(sorted(glob(path_glob)))
         for p in paths:
@@ -419,7 +420,7 @@ def iter_runs_serial(*path_globs, verbose=False, fillna=True) -> Iterator[Run]:
                 df = parse_run(p, verbose=verbose, fillna=fillna)
                 yield Run(p, df)
             except (pd.errors.EmptyDataError, FileNotFoundError) as e:
-                sys.stderr.write(f"[!] {p} : {e}\n")
+                print(f"[!] {p} : {e}", file=sys.stderr)
 
 
 def get_runs_serial(*path_globs, verbose=False, fillna=True) -> List[Run]:
@@ -431,7 +432,8 @@ def get_runs_serial(*path_globs, verbose=False, fillna=True) -> List[Run]:
 
     if not runs:
         for path_glob in path_globs:
-            sys.stderr.write(f"Warning: No match found for pattern {path_glob}\n")
+            print(f"Warning: No match found for pattern {path_glob}",
+                  file=sys.stderr)
 
     return runs
 
@@ -443,23 +445,23 @@ def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
     Runs in parallel.
     """
 
-    def handle_p(p):
+    def handle_p(p) -> Optional[Tuple[str, pd.DataFrame]]:
         try:
             df = parse_run(p, verbose=verbose, fillna=fillna)
             return p, df
         except (pd.errors.EmptyDataError, FileNotFoundError) as e:
-            sys.stderr.write(f"[!] {p} : {e}\n")
-            sys.stderr.flush()
-            return None, None
+            print(f"[!] {p} : {e}", file=sys.stderr, flush=True)
+            return None
 
     with ThreadPool(processes=n_jobs) as pool:
         futures = []
         for path_glob in path_globs:
-            if verbose:
-                sys.stderr.write(f"get_runs: {str(path_glob)}\n")
-                sys.stderr.flush()
 
             paths = list(sorted(glob(path_glob)))
+            if verbose and not paths:
+                print(f"Warning: a glob pattern '{path_glob}' "
+                       "did not match any files.", file=sys.stderr)
+
             for p in paths:
                 future = pool.apply_async(handle_p, [p])
                 futures.append(future)
@@ -467,14 +469,16 @@ def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
         hits = 0
         result = []
         for future in futures:
-            p, df = future.get()
-            if p:
+            p_and_df = future.get()
+            if p_and_df:
+                p, df = p_and_df
                 hits += 1
                 result.append(Run(p, df))
 
     if not hits:
         for path_glob in path_globs:
-            sys.stderr.write(f"Warning: No match found for pattern {path_glob}\n")
+            print(f"Warning: No match found for pattern {path_glob}",
+                  file=sys.stderr)
     return result
 
 
