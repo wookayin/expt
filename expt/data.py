@@ -42,7 +42,7 @@ from pandas.core.accessor import CachedAccessor
 from dataclasses import dataclass      # for python 3.6, backport needed
 
 from . import plot as _plot
-from .path_util import glob, exists, open
+from .path_util import glob, exists, open, isdir
 
 
 #########################################################################
@@ -344,21 +344,28 @@ def parse_run_progresscsv(run_folder, fillna=False,
     Create a pd.DataFrame object that contains information from
     progress.csv or log.csv file (as convention)
     """
-    df = None
+    # Try progress.csv or log.csv from folder
+    detected_csv = None
     for fname in ('progress.csv', 'log.csv'):
         p = os.path.join(run_folder, fname)
         if exists(p):
-            with open(p, mode='r') as f:
-                df = pd.read_csv(f)
+            detected_csv = p
             break
 
-    if df is None and exists(run_folder):
-        # maybe a direct file path.
-        with open(p, mode='r') as f:
-            df = pd.read_csv(f)
+    # maybe a direct file path is given instead of directory
+    if detected_csv is None:
+        if exists(run_folder) and not isdir(run_folder):
+            detected_csv = run_folder
 
-    if df is None:
-        raise FileNotFoundError(os.path.join(run_folder, "progress.csv"))
+    if detected_csv is None:
+        raise FileNotFoundError(os.path.join(run_folder, "*.csv"))
+
+    # Read the detected file `p`
+    if verbose:
+        print(f"parse_run (csv): Reading {detected_csv}", file=sys.stderr, flush=True)
+
+    with open(detected_csv, mode='r') as f:
+        df = pd.read_csv(f)
 
     if fillna:
         df = df.fillna(0)
@@ -378,7 +385,7 @@ def parse_run_tensorboard(run_folder, fillna=False,
         raise pd.errors.EmptyDataError(f"No event file detected in {run_folder}")
     event_file = event_file[-1]  # pick the last one
     if verbose:
-        print(f"Reading TF event file: {event_file} ...",
+        print(f"parse_run (tfevents) : Reading {event_file} ...",
               file=sys.stderr, flush=True)
 
     import tensorflow as tf

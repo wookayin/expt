@@ -48,6 +48,20 @@ def exists(path):
         return os.path.exists(path)
 
 
+def isdir(path):
+    """
+    Similar to os.path.isdir(path), but supports both local path and
+    remote path (Google Cloud Storage, gs://...) via gfile.isdir(...).
+    """
+    if path.startswith('gs://'):
+        # Bug: GCP glob does not match any directory on trailing slashes.
+        # https://github.com/GoogleCloudPlatform/gsutil/issues/444
+        path = path.rstrip('/')
+        return _import_gfile().isdir(path)  # noqa
+    else:
+        return os.path.isdir(path)
+
+
 def open(path, *, mode='r'):
     """
     Similar to built-in open(...), but supports Google Cloud Storage
