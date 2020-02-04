@@ -84,6 +84,7 @@ class HypothesisPlotter:
                  n_samples=None,
                  rolling=None,
                  ignore_unknown: bool = False,
+                 prettify_labels: bool = True,
                  **kwargs):
         '''
         Hypothesis.plot based on matplotlib.
@@ -96,6 +97,8 @@ class HypothesisPlotter:
             - rolling (int): A window size for rolling and smoothing.
             - n_samples (int): If given, we subsample using n_samples number of
               equidistant points over the x axis. Values will be interpolated.
+            - prettify_labels (bool): If True (default), apply a sensible
+              default prettifier to the legend labels, truncating long names.
             - std_alpha (float): If not None, will show the 1-std range as a
               shaded area. Defaults 0.2 (enabled).
             - runs_alpha (float): If not None, will draw an individual line
@@ -172,17 +175,20 @@ class HypothesisPlotter:
         return self._do_plot(y, mean, std, n_samples=n_samples,
                              subplots=subplots, rolling=rolling,
                              std_alpha=std_alpha, runs_alpha=runs_alpha,
+                             prettify_labels=prettify_labels,
                              args=args, kwargs=kwargs)
 
     def _do_plot(self,
                  y: List[str],
                  mean: pd.DataFrame,
                  std: pd.DataFrame,
+                 *,
                  n_samples: Optional[int],
                  subplots: bool,
                  rolling: Optional[int],
                  std_alpha: Optional[float],
                  runs_alpha: Optional[float],
+                 prettify_labels: bool = True,
                  args: List,
                  kwargs: Dict,
                  ):
@@ -190,7 +196,9 @@ class HypothesisPlotter:
         if subplots:  # mode (1) -- separate subplots
             title = list(y)
             color = [kwargs.get('color', '#1f77b4')] * len(y)
-            label = util.prettify_labels([self.name or ''] * len(y))
+            label = [self.name or ''] * len(y)
+            if prettify_labels:
+                label = util.prettify_labels(label)
 
             # TODO: layout -> grid
             kwargs.update(dict(y=y, title=title,
@@ -371,22 +379,24 @@ class ExperimentPlotter:
             from .colors import get_standard_colors
             colors = get_standard_colors(num_colors=len(self._hypotheses))
 
-        hypothesis_labels = util.prettify_labels(
-            [name for name, _ in self._hypotheses.items()]
-        )
+        hypothesis_labels = [name for name, _ in self._hypotheses.items()]
+        if kwargs.get('prettify_labels', True):
+            hypothesis_labels = util.prettify_labels(hypothesis_labels)
+
         for i, (name, hypo) in enumerate(self._hypotheses.items()):
             if isinstance(y, str):
                 # display different hypothesis over subplots:
                 kwargs['label'] = hypothesis_labels[i]
                 kwargs['subplots'] = False
-                kwargs['title'] = y    # column name
+                if 'title' not in kwargs:
+                    kwargs['title'] = y    # column name
 
             else:
                 # display multiple columns over subplots:
                 if y:
-                    kwargs['label'] = util.prettify_labels(
-                        [f'{y_i} ({name})' for y_i in y]
-                    )
+                    kwargs['label'] = [f'{y_i} ({name})' for y_i in y]
+                    if kwargs.get('prettify_labels', True):
+                        kwargs['label'] = util.prettify_labels(kwargs['label'])
                 kwargs['subplots'] = True
             kwargs['color'] = colors[i]
             ax = hypo.plot(*args, ax=ax, **kwargs)    # on the same ax(es)?
