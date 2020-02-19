@@ -78,9 +78,13 @@ class HypothesisPlotter:
 
         return mean, std
 
+
+    KNOWN_ERR_STYLES = (None, False, 'band', 'fill', 'runs', 'unit_traces')
+
     def __call__(self, *args,
                  subplots=True,
-                 std_alpha=0.2, runs_alpha=None,
+                 err_style="runs",
+                 std_alpha=0.2, runs_alpha=0.2,
                  n_samples=None,
                  rolling=None,
                  ignore_unknown: bool = False,
@@ -99,10 +103,16 @@ class HypothesisPlotter:
               equidistant points over the x axis. Values will be interpolated.
             - prettify_labels (bool): If True (default), apply a sensible
               default prettifier to the legend labels, truncating long names.
+            - err_style (str): How to show individual runs (traces) or
+              confidence interval as shaded area.
+              Possible values: (None, 'runs', 'unit_traces', 'band', 'fill')
+               (i) runs, unit_traces: Show individual runs/traces (see runs_alpha).
+               (ii) band, fill: Show as shaded area (see std_alpha).
+               (iii) None or False: do not display any errors.
             - std_alpha (float): If not None, will show the 1-std range as a
-              shaded area. Defaults 0.2 (enabled).
+              shaded area. Defaults 0.2,
             - runs_alpha (float): If not None, will draw an individual line
-              for each run. Defaults None (disabled), recommend value 0.2.
+              for each run. Defaults 0.2.
 
         All other kwargs is passed to DataFrame.plot(). For example, you may
         find the following parameters useful:
@@ -174,6 +184,7 @@ class HypothesisPlotter:
 
         return self._do_plot(y, mean, std, n_samples=n_samples,
                              subplots=subplots, rolling=rolling,
+                             err_style=err_style,
                              std_alpha=std_alpha, runs_alpha=runs_alpha,
                              prettify_labels=prettify_labels,
                              args=args, kwargs=kwargs)
@@ -186,8 +197,9 @@ class HypothesisPlotter:
                  n_samples: Optional[int],
                  subplots: bool,
                  rolling: Optional[int],
-                 std_alpha: Optional[float],
-                 runs_alpha: Optional[float],
+                 err_style: Optional[str],
+                 std_alpha: float,
+                 runs_alpha: float,
                  prettify_labels: bool = True,
                  args: List,
                  kwargs: Dict,
@@ -229,7 +241,11 @@ class HypothesisPlotter:
             del kwargs['layout']
         axes = mean.plot(*args, subplots=subplots, **kwargs)
 
-        if std_alpha is not None:
+        if err_style not in self.KNOWN_ERR_STYLES:
+            raise ValueError(f"Unknown err_style '{err_style}', "
+                             f"expected one of {self.KNOWN_ERR_STYLES}")
+
+        if err_style in ('band', 'fill'):
             # show shadowed range of 1-std errors
             for ax, yi in zip(np.asarray(axes).flat, y):
                 mean_line = ax.get_lines()[-1]
@@ -239,7 +255,7 @@ class HypothesisPlotter:
                                 color=mean_line.get_color(),
                                 alpha=std_alpha)
 
-        if runs_alpha and len(self.runs) > 1:
+        elif err_style in ('runs', 'unit_traces') and len(self.runs) > 1:
             # show individual runs
             for ax, yi in zip(np.asarray(axes).flat, y):
                 x = kwargs.get('x', None)
@@ -251,8 +267,9 @@ class HypothesisPlotter:
                 for df in df_individuals:
                     if rolling:
                         df = df.rolling(rolling, min_periods=1, center=True).mean()
-                    df.plot(ax=ax, x=x, y=yi, legend=False, color=color,
-                            alpha=runs_alpha)
+                    df.plot(ax=ax, x=x, y=yi, legend=False, label='',
+                            color=color, alpha=runs_alpha)
+
 
         # some sensible styling (grid, tight_layout)
         axes_arr = np.asarray(axes).flat
