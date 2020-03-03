@@ -388,11 +388,11 @@ def parse_run_tensorboard(run_folder, fillna=False,
         print(f"parse_run (tfevents) : Reading {event_file} ...",
               file=sys.stderr, flush=True)
 
-    import tensorflow as tf
     from collections import defaultdict
+    from tensorflow.python.summary.summary_iterator import summary_iterator
 
     def iter_scalar_summary_from_event_file(event_file):
-        for event in tf.train.summary_iterator(event_file):
+        for event in summary_iterator(event_file):
             step = int(event.step)
             if not event.HasField('summary'):
                 continue
