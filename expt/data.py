@@ -428,7 +428,12 @@ def parse_run_tensorboard(run_folder, fillna=False,
     for t in list(all_data.keys()):
         all_data[t]['global_step'] = t
 
-    return pd.DataFrame(all_data).T
+    df = pd.DataFrame(all_data).T
+
+    # Reorder column names in a lexicographical order
+    df = df.reindex(sorted(df.columns), axis=1)
+    return df
+
 
 
 def iter_runs_serial(*path_globs, verbose=False, fillna=True) -> Iterator[Run]:
