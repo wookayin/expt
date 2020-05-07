@@ -463,32 +463,45 @@ def get_runs_serial(*path_globs, verbose=False, fillna=True) -> List[Run]:
     return runs
 
 
+def _handle_path(p, verbose, fillna) -> Optional[Tuple[str, pd.DataFrame]]:
+    try:
+        df = parse_run(p, verbose=verbose, fillna=fillna)
+        return p, df
+    except (pd.errors.EmptyDataError, FileNotFoundError) as e:
+        print(f"[!] {p} : {e}", file=sys.stderr, flush=True)
+        return None
+
+
 def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
+                      pool_class=ThreadPool,
                       ) -> List[Run]:
     """
     Get a list of Run objects from the given path(s).
     Runs in parallel.
     """
 
-    def handle_p(p) -> Optional[Tuple[str, pd.DataFrame]]:
-        try:
-            df = parse_run(p, verbose=verbose, fillna=fillna)
-            return p, df
-        except (pd.errors.EmptyDataError, FileNotFoundError) as e:
-            print(f"[!] {p} : {e}", file=sys.stderr, flush=True)
-            return None
+    if isinstance(pool_class, str):
+        Pool = {'threading': ThreadPool,
+                'multiprocessing': MultiprocessPool,
+                }.get(pool_class, None)
+        if not Pool:
+            raise ValueError("Unknown pool_class: {} ".format(pool_class) +
+                             "(expected threading/multiprocessing)")
+    elif callable(pool_class):
+        Pool = pool_class
+    else:
+        raise TypeError("Unknown type for pool_class: {}".format(pool_class))
 
-    with ThreadPool(processes=n_jobs) as pool:
+    with Pool(processes=n_jobs) as pool:   # type: ignore
         futures = []
         for path_glob in path_globs:
-
             paths = list(sorted(glob(path_glob)))
             if verbose and not paths:
                 print(f"Warning: a glob pattern '{path_glob}' "
                        "did not match any files.", file=sys.stderr)
 
             for p in paths:
-                future = pool.apply_async(handle_p, [p])
+                future = pool.apply_async(_handle_path, [p, verbose, fillna])
                 futures.append(future)
 
         hits = 0
