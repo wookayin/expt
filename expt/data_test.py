@@ -1,10 +1,12 @@
 import sys
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from expt.data import Run, RunList
 from expt.data import Hypothesis
+from expt.data import Experiment
 
 
 class TestDataStructure:
@@ -53,12 +55,48 @@ class TestDataStructure:
         assert h.name == 'r0'
         assert h.runs.as_list() == [r0]
 
-        h = Hypothesis.of(
-            (Run(i, df=pd.DataFrame()) for i in ["a", "b", "c"]),
-            name="generator")
+        def generator():
+            for i in ["a", "b", "c"]:
+                yield Run(i, df=pd.DataFrame())
+        h = Hypothesis.of(generator(), name="generator")
         print(h)
         assert h.name == 'generator'
         assert len(h) == 3
+
+    def testHypothesisData(self):
+        # test gropued, columns, mean, std, min, max, etc.
+        pass
+
+    def testExperimentIndexing(self):
+        h0 = Hypothesis("hyp0", Run('r0', pd.DataFrame({"a": [1, 2, 3]})))
+        h1 = Hypothesis("hyp1", Run('r1', pd.DataFrame({"a": [4, 5, 6]})))
+
+        ex = Experiment(title="ex", hypotheses=[h0, h1])
+        def V(x):
+            print(x)
+            return x
+
+        # get hypothesis by name or index
+        assert V(ex[0]) == h0
+        assert V(ex[1]) == h1
+        with pytest.raises(IndexError): V(ex[2])
+        assert V(ex["hyp0"]) == h0
+        with pytest.raises(KeyError): V(ex["hyp0-not"])
+
+        # nested index
+        r = V(ex["hyp0", 'a'])
+        assert isinstance(r, pd.DataFrame)
+        # assert r is ex["hyp0"]['a']             # TODO
+        assert list(r['r0']) == [1, 2, 3]
+
+        # fancy index
+        r = V(ex[[0, 1]])
+        assert r[0] is h0 and r[1] is h1
+        r = V(ex[['hyp1', 'hyp0']])
+        assert r[0] is h1 and r[1] is h0
+
+        with pytest.raises(NotImplementedError):  # TODO
+            r = V(ex[['hyp1', 'hyp0'], 'a'])
 
 
 if __name__ == '__main__':

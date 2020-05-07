@@ -25,8 +25,9 @@ of hypotheses or algorithms applied over different environments or dataset).
 """
 
 import collections
+import itertools
 from typing import Union, Iterable, Iterator, Optional
-from typing import List, Tuple, Set, Sequence, MutableMapping
+from typing import List, Tuple, Set, Sequence, Mapping, MutableMapping
 from typeguard import typechecked
 
 import sys
@@ -99,7 +100,7 @@ class RunList(Sequence[Run]):
     such as filtering, searching, and handy format conversion.
     """
     def __init__(self, runs: Iterable[Run]):
-        self._validate_type(runs)
+        runs = self._validate_type(runs)
         self._runs = list(runs)
 
     @classmethod
@@ -109,13 +110,19 @@ class RunList(Sequence[Run]):
         else:
             return cls(runs)  # RunList(runs)
 
-    def _validate_type(self, runs):
+    def _validate_type(self, runs) -> List[Run]:
         if not isinstance(runs, Iterable):
             raise TypeError("`runs` must be a {}, but given {}".format(
                 Iterable, type(runs)))
+        if isinstance(runs, Mapping):
+            raise TypeError("`runs` should not be a dictionary, given {} "
+                            " (forgot to wrap with pd.DataFrame?)".format(type(runs)))
+
+        runs = list(runs)
         if not all(isinstance(r, Run) for r in runs):
             raise TypeError("`runs` must be a iterable of Run, "
                             "but given {}".format([type(r) for r in runs]))
+        return runs
 
     def __getitem__(self, index_or_slice):
         return self._runs[index_or_slice]
@@ -139,7 +146,12 @@ class Hypothesis(Iterable[Run]):
     name: str
     runs: RunList
 
-    def __init__(self, name: str, runs: Iterable[Run]):
+    def __init__(self, name: str, runs: Union[Run, Iterable[Run]]):
+        if isinstance(runs, Run) or isinstance(runs, pd.DataFrame):
+            if not isinstance(runs, Run):
+                runs = Run.of(runs)
+            runs = [runs]  # type: ignore
+
         self.name = name
         self.runs = RunList.of(runs)
 
@@ -151,12 +163,9 @@ class Hypothesis(Iterable[Run]):
            *, name: Optional[str] = None):
         """A static factory method."""
         if isinstance(runs, Run):
-            runs = [runs]
-            name = name or runs[0].path
-        else:
-            runs = list(runs)
-            name = name or ''
-        return cls(name=name, runs=runs)
+            name = name or runs.path
+
+        return cls(name=name or '', runs=runs)
 
     def __getitem__(self, k):
         if isinstance(k, int):
@@ -232,6 +241,9 @@ class Experiment(Iterable[Hypothesis]):
             hypotheses = list(hypotheses)
 
         for h in (hypotheses or []):
+            if not isinstance(h, Hypothesis):
+                raise TypeError("An element of hypotheses contains a wrong type: "
+                                "{} ".format(type(h)))
             if h.name in self._hypotheses:
                 raise ValueError(f"Duplicate hypothesis name: `{h.name}`")
             self._hypotheses[h.name] = h
@@ -306,13 +318,45 @@ class Experiment(Iterable[Hypothesis]):
 
     def __repr__(self) -> str:
         return (
-            f"Experiment('{self.name}', {len(self._hypotheses)} hypotheses: " +
-            pprint.pformat([exp for exp in self._hypotheses]) +
-            ")"
+            f"Experiment('{self.name}', {len(self._hypotheses)} hypotheses: [ \n" +
+            '\n '.join([repr(exp) for exp in self._hypotheses]) +
+            "\n])"
         )
 
-    def __getitem__(self, name: str) -> Hypothesis:
-        return self._hypotheses[name]
+    def __getitem__(self, key: Union[str, Tuple],
+                    ) -> Union[Hypothesis, np.ndarray, Run, pd.DataFrame]:
+        """Return self[key]. `key` can be one of the following:
+        - str: The hypothesis's name to retrieve.
+        - int: An index [0, len(self)) in all hypothesis. A numpy-style fancy
+          indexing is supported.
+        - Tuple(hypo_key: str|int, column: str):
+          - The first axis is the same as previous (hypothesis' name or index)
+          - The second one is the column name. The return value will be same
+            as self[hypo_key][column].
+        """
+        if isinstance(key, str):
+            name = key
+            return self._hypotheses[name]
+        elif isinstance(key, int):
+            try:
+                name = next(itertools.islice(self._hypotheses.keys(), key, None))
+            except StopIteration:
+                raise IndexError("out of range: {} (should be < {})".format(
+                    key, len(self._hypotheses)))
+            return self._hypotheses[name]
+        elif isinstance(key, list) or isinstance(key, np.ndarray):
+            # fancy indexing through int?  # TODO: support str
+            hypo_keys = list(self._hypotheses.keys())
+            to_key = lambda k: k if isinstance(k, str) else hypo_keys[k]
+            return [self._hypotheses[to_key(k)] for k in key]
+        elif isinstance(key, tuple):
+            hypo_key, column = key
+            hypos = self[hypo_key]
+            if isinstance(hypos, list):
+                raise NotImplementedError("2-dim fancy indexing is not implementd")
+            return hypos[column]   # type: ignore
+        else:
+            raise ValueError("Unsupported index: {}".format(key))
 
     def __setitem__(self, name: str,
                     hypothesis_or_runs: Union[Hypothesis, List[Run]]) -> Hypothesis:
