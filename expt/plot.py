@@ -152,6 +152,11 @@ class HypothesisPlotter:
             if 'x' in kwargs:
                 del kwargs['x']
 
+        # there might be many NaN values if each column is being logged
+        # at a different period. We fill in the missing values.
+        mean = mean.interpolate()
+        std = std.interpolate()
+
         # determine which columns to draw (i.e. y) before smoothing.
         # should only include numerical values
         y: Iterable[str] = kwargs.get('y', None) or mean.columns
