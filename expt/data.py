@@ -26,7 +26,7 @@ of hypotheses or algorithms applied over different environments or dataset).
 
 import collections
 from typing import Union, Iterable, Iterator, Optional
-from typing import List, Tuple, Set, MutableMapping
+from typing import List, Tuple, Set, Sequence, MutableMapping
 from typeguard import typechecked
 
 import sys
@@ -34,10 +34,12 @@ import types
 import os.path
 import pprint
 from multiprocessing.pool import ThreadPool
+from multiprocessing.pool import Pool as MultiprocessPool
 
 import pandas as pd
 import numpy as np
 from pandas.core.accessor import CachedAccessor
+from pandas.core.groupby.generic import DataFrameGroupBy
 
 from dataclasses import dataclass      # for python 3.6, backport needed
 
@@ -91,10 +93,55 @@ class Run:
         return self.as_hypothesis().hvplot(*args, subplots=subplots, **kwargs)
 
 
+class RunList(Sequence[Run]):
+    """
+    A (immutable) list of Run objects, but with some useful utility methods
+    such as filtering, searching, and handy format conversion.
+    """
+    def __init__(self, runs: Iterable[Run]):
+        self._validate_type(runs)
+        self._runs = list(runs)
+
+    @classmethod
+    def of(cls, runs: Iterable[Run]):
+        if isinstance(runs, cls):
+            return runs       # do not make a copy
+        else:
+            return cls(runs)  # RunList(runs)
+
+    def _validate_type(self, runs):
+        if not isinstance(runs, Iterable):
+            raise TypeError("`runs` must be a {}, but given {}".format(
+                Iterable, type(runs)))
+        if not all(isinstance(r, Run) for r in runs):
+            raise TypeError("`runs` must be a iterable of Run, "
+                            "but given {}".format([type(r) for r in runs]))
+
+    def __getitem__(self, index_or_slice):
+        return self._runs[index_or_slice]
+
+    def __len__(self):
+        return len(self._runs)
+
+    def __repr__(self):
+        return "RunList([\n " + "\n ".join(repr(r) for r in self._runs) + "\n]"
+
+    def extend(self, more_runs: Iterable[Run]):
+        self._runs.extend(more_runs)
+
+    def as_list(self):
+        """Create a new copy of list containing all the runs."""
+        return list(self._runs)
+
+
 @dataclass
 class Hypothesis(Iterable[Run]):
     name: str
-    runs: List[Run]
+    runs: RunList
+
+    def __init__(self, name: str, runs: Iterable[Run]):
+        self.name = name
+        self.runs = RunList.of(runs)
 
     def __iter__(self) -> Iterator[Run]:
         return iter(self.runs)
@@ -108,7 +155,7 @@ class Hypothesis(Iterable[Run]):
             name = name or runs[0].path
         else:
             runs = list(runs)
-            name = name or None
+            name = name or ''
         return cls(name=name, runs=runs)
 
     def __getitem__(self, k):
@@ -121,7 +168,7 @@ class Hypothesis(Iterable[Run]):
         return pd.DataFrame({r.path: r.df[k] for r in self.runs})
 
     def __repr__(self) -> str:
-        return (f"Hypothesis({self.name}, <{len(self.runs)} runs>)")
+        return (f"Hypothesis({self.name!r}, <{len(self.runs)} runs>)")
 
     def __len__(self) -> int:
         return len(self.runs)
@@ -140,7 +187,7 @@ class Hypothesis(Iterable[Run]):
     hvplot.__doc__ = _plot.HypothesisHvPlotter.__doc__
 
     @property
-    def grouped(self) -> 'DataFrameGroupBy':
+    def grouped(self) -> DataFrameGroupBy:
         return pd.concat(self._dataframes, sort=False).groupby(level=0)
 
     @property
@@ -206,9 +253,9 @@ class Experiment(Iterable[Hypothesis]):
             if isinstance(runs, Run): runs = [runs]
 
             return [Run.of(r) for r in runs]
-        runs = check_runs_type(runs)
+        _runs = check_runs_type(runs)
 
-        d = Hypothesis(name=hypothesis_name, runs=runs)
+        d = Hypothesis.of(name=hypothesis_name, runs=_runs)
         return self.add_hypothesis(d, extend_if_conflict=True)
 
     @typechecked
@@ -453,7 +500,7 @@ def iter_runs_serial(*path_globs, verbose=False, fillna=True) -> Iterator[Run]:
                 print(f"[!] {p} : {e}", file=sys.stderr)
 
 
-def get_runs_serial(*path_globs, verbose=False, fillna=True) -> List[Run]:
+def get_runs_serial(*path_globs, verbose=False, fillna=True) -> RunList:
     """
     Get a list of Run objects from the given path(s).
     Works in single-thread (slow, should not used outside debugging purposes).
@@ -465,7 +512,7 @@ def get_runs_serial(*path_globs, verbose=False, fillna=True) -> List[Run]:
             print(f"Warning: No match found for pattern {path_glob}",
                   file=sys.stderr)
 
-    return runs
+    return RunList(runs)
 
 
 def _handle_path(p, verbose, fillna) -> Optional[Tuple[str, pd.DataFrame]]:
@@ -479,7 +526,7 @@ def _handle_path(p, verbose, fillna) -> Optional[Tuple[str, pd.DataFrame]]:
 
 def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
                       pool_class=ThreadPool,
-                      ) -> List[Run]:
+                      ) -> RunList:
     """
     Get a list of Run objects from the given path(s).
     Runs in parallel.
@@ -522,7 +569,7 @@ def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
         for path_glob in path_globs:
             print(f"Warning: No match found for pattern {path_glob}",
                   file=sys.stderr)
-    return result
+    return RunList(result)
 
 
 get_runs = get_runs_parallel
