@@ -327,13 +327,52 @@ class Experiment(Iterable[Hypothesis]):
 
         return self._hypotheses[name]
 
-
     @property
     def columns(self) -> Iterable[str]:
         y: Set[str] = set()
         for h in self._hypotheses.values():
             y.update(h.columns)
         return list(y)
+
+    @staticmethod
+    def AGGREGATE_MEAN_LAST(portion: float):
+        return (lambda series: series.rolling(
+            max(1, int(len(series) * portion))).mean().iloc[-1])
+
+    def summary(self, columns=None, aggregate=None) -> pd.DataFrame:
+        '''Return a DataFrame that summarizes the current experiments,
+        whose rows are all hypothesis.
+
+        Args:
+          columns: The list of columns to show. Defaults to `self.columns` plus
+            `"index"`.
+          aggregate: A function or a dict of functions ({column_name: ...})
+            specifying a strategy to aggregate a `Series`. Defaults to take the
+            average of the last 10% of the series.
+
+        Example Usage:
+
+        >>> pd.set_option('display.max_colwidth', 2000)   # hypothesis name can be long!
+        >>> df = ex.summary(columns=['index', 'loss', 'return'])
+        >>> df.style.background_gradient(cmap='viridis')
+
+        '''
+        columns = columns or (['index'] + list(self.columns))
+        aggregate = aggregate or self.AGGREGATE_MEAN_LAST(0.1)
+
+        df = pd.DataFrame({'hypothesis': [h.name for h in self.hypotheses]})
+        for column in columns:
+            def df_series(df: pd.DataFrame):
+                s = df[column].dropna() if column != 'index' else df.index
+                return s
+            def aggregate_h(series):
+                aggregate_fn = aggregate
+                if not callable(aggregate_fn):
+                    aggregate_fn = aggregate[column]
+                v = aggregate_fn(series) if column != 'index' else series.max()
+                return v
+            df[column] = [aggregate_h(df_series(h.mean())) for h in self.hypotheses]
+        return df
 
     def hvplot(self, *args, **kwargs):
         plot = None
