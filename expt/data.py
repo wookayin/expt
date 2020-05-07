@@ -77,7 +77,7 @@ class Run:
         return run
 
     def __repr__(self):
-        return 'Run({path}, df with {rows} rows)'.format(
+        return 'Run({path!r}, df with {rows} rows)'.format(
             path=self.path, rows=len(self.df))
 
     def as_hypothesis(self):
@@ -390,6 +390,27 @@ def parse_run_tensorboard(run_folder, fillna=False,
 
     from collections import defaultdict
     from tensorflow.python.summary.summary_iterator import summary_iterator
+    from tensorflow.python.framework.dtypes import DType
+
+    def _read_proto_value(node, path: str):
+        for p in path.split('.'):
+            node = getattr(node, p, None)
+            if node is None:
+                return None
+        return node
+
+    def _extract_scalar_from_proto(value, step):
+        if value.HasField('simple_value'):  # v1
+            simple_value = _read_proto_value(value, 'simple_value')
+            yield step, value.tag, simple_value
+        elif value.HasField('metadata'):  # v2 eventfile
+            if _read_proto_value(value, 'metadata.plugin_data.plugin_name') == 'scalars':
+                t = _read_proto_value(value, 'tensor')
+                if t:
+                    dtype = DType(t.dtype).as_numpy_dtype
+                    simple_value = np.frombuffer(t.tensor_content, dtype=dtype)[0]
+                    yield step, value.tag, simple_value
+
 
     def iter_scalar_summary_from_event_file(event_file):
         for event in summary_iterator(event_file):
@@ -397,15 +418,12 @@ def parse_run_tensorboard(run_folder, fillna=False,
             if not event.HasField('summary'):
                 continue
             for value in event.summary.value:
-                # look for scalar values
-                if value.HasField('simple_value'):
-                    # value.tag, value.simple_value, etc ...
-                    yield step, value
+                yield from _extract_scalar_from_proto(value, step=step)
 
-    all_data = defaultdict(dict)   # int(timestep) -> dict of columns
-    for step, value in iter_scalar_summary_from_event_file(event_file):
-        tag_name, scalar_value = value.tag, value.simple_value
-        all_data[step][tag_name] = scalar_value
+    # int(timestep) -> dict of columns
+    all_data = defaultdict(dict)  # type: ignore
+    for step, tag_name, value in iter_scalar_summary_from_event_file(event_file):
+        all_data[step][tag_name] = value
 
     for t in list(all_data.keys()):
         all_data[t]['global_step'] = t
