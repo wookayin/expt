@@ -519,8 +519,16 @@ def parse_run_tensorboard(run_folder, fillna=False,
               file=sys.stderr, flush=True)
 
     from collections import defaultdict
-    from tensorflow.python.summary.summary_iterator import summary_iterator
     from tensorflow.python.framework.dtypes import DType
+    from tensorflow.core.util import event_pb2
+    try:
+        # avoid DeprecationWarning on tf_record_iterator
+        from tensorflow.python._pywrap_record_io import RecordIterator
+        def summary_iterator(path):
+            for r in RecordIterator(path, ""):
+                yield event_pb2.Event.FromString(r)
+    except:
+        from tensorflow.python.summary.summary_iterator import summary_iterator  # type: ignore
 
     def _read_proto_value(node, path: str):
         for p in path.split('.'):
