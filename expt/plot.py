@@ -164,6 +164,14 @@ class HypothesisPlotter:
         if 'x' in kwargs:
             y = [yi for yi in y if yi != kwargs['x']]
 
+        if ignore_unknown:
+            # TODO(remove): this is hack to handle homogeneous column names
+            # over different hypotheses in a single of experiment, because it
+            # will end up adding dummy columns instead of ignoring unknowns.
+            extra_y = set(y) - set(mean.columns)
+            for yi in extra_y:
+                mean[yi] = np.nan
+
         def _should_include_column(col_name: str) -> bool:
             if not col_name:   # empty name
                 return False
@@ -173,9 +181,10 @@ class HypothesisPlotter:
                 if ignore_unknown:
                     return False   # just ignore, no error
                 else:
-                    raise ValueError(f"Unknown column name '{col_name}'. "
-                                     "Available columns: {}".format(
-                                         list(mean.columns)))
+                    raise ValueError(
+                        f"Unknown column name '{col_name}'. " +
+                        f"Available columns: {list(mean.columns)}; " +
+                        "Use ignore_unknown=True to ignore unknown columns.")
 
             # include only numeric values (integer or float)
             if not (mean.dtypes[col_name].kind in ('i', 'f')):
