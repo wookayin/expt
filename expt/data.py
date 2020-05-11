@@ -197,6 +197,7 @@ class Hypothesis(Iterable[Run]):
 
     @property
     def grouped(self) -> DataFrameGroupBy:
+        # TODO: Handle a corner case where all runs are of empty DataFrame
         return pd.concat(self._dataframes, sort=False).groupby(level=0)
 
     @property
@@ -405,17 +406,27 @@ class Experiment(Iterable[Hypothesis]):
         aggregate = aggregate or self.AGGREGATE_MEAN_LAST(0.1)
 
         df = pd.DataFrame({'hypothesis': [h.name for h in self.hypotheses]})
+        hypo_means = [(h.mean() if not all(len(df) == 0 for df in h._dataframes)
+                      else pd.DataFrame()) for h in self.hypotheses]
+
         for column in columns:
             def df_series(df: pd.DataFrame):
-                s = df[column].dropna() if column != 'index' else df.index
-                return s
+                if column == 'index':
+                    return df.index
+                if column not in df:
+                    return []
+                else:
+                    return df[column].dropna()
             def aggregate_h(series):
+                if len(series) == 0:
+                    # after dropna, no numeric types to aggregate?
+                    return np.nan
                 aggregate_fn = aggregate
                 if not callable(aggregate_fn):
                     aggregate_fn = aggregate[column]
                 v = aggregate_fn(series) if column != 'index' else series.max()
                 return v
-            df[column] = [aggregate_h(df_series(h.mean())) for h in self.hypotheses]
+            df[column] = [aggregate_h(df_series(hm)) for hm in hypo_means]
         return df
 
     def hvplot(self, *args, **kwargs):
