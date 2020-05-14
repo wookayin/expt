@@ -197,7 +197,6 @@ class Hypothesis(Iterable[Run]):
 
     @property
     def grouped(self) -> DataFrameGroupBy:
-        # TODO: Handle a corner case where all runs are of empty DataFrame
         return pd.concat(self._dataframes, sort=False).groupby(level=0)
 
     @property
@@ -210,22 +209,32 @@ class Hypothesis(Iterable[Run]):
 
     @property
     def columns(self) -> Iterable[str]:
-        return self.grouped.mean().columns.values
+        g = self.grouped
+        if len(g) == 0: return pd.Index([])
+        return g.mean().columns.values
 
     def rolling(self, *args, **kwargs):
         return self.grouped.rolling(*args, **kwargs)
 
     def mean(self, *args, **kwargs) -> pd.DataFrame:
-        return self.grouped.mean(*args, **kwargs)
+        g = self.grouped
+        if len(g) == 0: return pd.DataFrame()
+        return g.mean(*args, **kwargs)
 
     def std(self, *args, **kwargs) -> pd.DataFrame:
-        return self.grouped.std(*args, **kwargs)
+        g = self.grouped
+        if len(g) == 0: return pd.DataFrame()
+        return g.std(*args, **kwargs)
 
     def min(self, *args, **kwargs) -> pd.DataFrame:
-        return self.grouped.min(*args, **kwargs)
+        g = self.grouped
+        if len(g) == 0: return pd.DataFrame()
+        return g.min(*args, **kwargs)
 
     def max(self, *args, **kwargs) -> pd.DataFrame:
-        return self.grouped.max(*args, **kwargs)
+        g = self.grouped
+        if len(g) == 0: return pd.DataFrame()
+        return g.max(*args, **kwargs)
 
 
 class Experiment(Iterable[Hypothesis]):
