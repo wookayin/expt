@@ -301,14 +301,19 @@ class HypothesisHvPlotter(HypothesisPlotter):
                  y: List[str],
                  mean: pd.DataFrame,
                  std: pd.DataFrame,
+                 *,
                  n_samples: Optional[int],
                  subplots: bool,
                  rolling: Optional[int],
+                 err_style: Optional[str],
                  std_alpha: Optional[float],
                  runs_alpha: Optional[float],
+                 prettify_labels: bool = False,
                  args: List,
                  kwargs: Dict,
                  ):
+        if not hasattr(mean, 'hvplot'):
+            import hvplot.pandas
 
         if subplots:
             kwargs['legend'] = False
