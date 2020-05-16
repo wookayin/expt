@@ -1,41 +1,60 @@
+import os
+import subprocess
 import sys
+import tempfile
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from expt.data import Run, RunList
-from expt.data import Hypothesis
-from expt.data import Experiment
+import expt.data
+from expt.data import Experiment, Hypothesis, Run, RunList
+
+try:
+    from rich.console import Console
+    console = Console(markup=False)
+    print = console.log
+except ImportError:
+    pass
+
+
+def V(x):
+    """Print the object and return it."""
+    kwargs = dict(_stack_offset=2) if print.__name__ == 'log' else {}
+    print(x, **kwargs)
+    return x
 
 
 class TestDataStructure:
 
     def setup_method(self, method):
-        print("")
+        sys.stdout.write("\n")
 
     def testRunList(self):
+        # instantiation
         r0 = Run("r0", pd.DataFrame({"y" : [1, 2, 3]}))
         r1 = Run("r1", pd.DataFrame({"y" : [1, 4, 9]}))
         runs = RunList([r0, r1])
-
-        r0_, r1_ = runs  # unpacking
-        assert r0_ is r0 and r1_ is r1
-
         print("runs =", runs)
-        assert list(runs) == [r0, r1]
-        assert runs[0] is r0
 
+        # unpacking, indexing
+        r0_, r1_ = runs
+        assert r0_ is r0 and r1_ is r1
+        assert runs[0] is r0
+        assert runs[-1] is r1
+
+        # iteration
+        assert list(runs) == [r0, r1]
         for i, r in enumerate(runs):
             print("r from iterable :", r)
             assert r == [r0, r1][i]
 
-        assert RunList.of(runs) is runs  # no copy!
+        assert RunList.of(runs) is runs  # no copy should be made
 
+        # list-like operations: extend
         r2 = Run("r1", pd.DataFrame({"y" : [2, 2, 2]}))
         runs.extend([r2])
         assert len(runs) == 3
-
 
     def testHypothesisCreation(self):
         # instance creation (with auto type conversion)
@@ -72,9 +91,6 @@ class TestDataStructure:
         h1 = Hypothesis("hyp1", Run('r1', pd.DataFrame({"a": [4, 5, 6]})))
 
         ex = Experiment(title="ex", hypotheses=[h0, h1])
-        def V(x):
-            print(x)
-            return x
 
         # get hypothesis by name or index
         assert V(ex[0]) == h0
