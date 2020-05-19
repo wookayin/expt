@@ -26,7 +26,7 @@ of hypotheses or algorithms applied over different environments or dataset).
 
 import collections
 import itertools
-from typing import Union, Iterable, Iterator, Optional
+from typing import Any, Union, Dict, Iterable, Iterator, Optional
 from typing import List, Tuple, Set, Sequence, Mapping, MutableMapping
 from typeguard import typechecked
 

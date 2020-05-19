@@ -4,16 +4,118 @@ Plotting behavior (matplotlib, hvplot, etc.) for expt.data
 
 import warnings
 from typing import Union, Iterable, Iterator, Optional
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Any
 
 import numpy as np
 import pandas as pd
 from scipy import interpolate
 
+from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 
 from . import util
 from . import data
+
+
+class GridPlot:
+    """Multi-plot grid subplots.
+
+    This class provides more object-oriented methods to manipulate matplotlib
+    grid subplots (even after creation). For example, add_legend()."""
+
+    def __init__(self, *,
+                 fig: Optional[Figure] = None,
+                 axes: Optional[np.ndarray] = None,
+                 y_names: List[str],
+                 layout: Optional[Tuple[int, int]] = None,
+                 figsize: Optional[Tuple[int, int]] = None,
+                 ):
+        """Initialize the matplotlib figure and GridPlot object.
+
+        Args:
+        """
+
+        if isinstance(y_names, str):
+            raise TypeError("`y_names` must be a List[str], "
+                            "but given {}".format(type(y_names)))
+        y_names = list(y_names)
+        if not y_names:
+            raise ValueError("y_names should be a non-empty array.")
+        self.n_plots = len(y_names)
+
+        # Compute the grid shape
+        if layout is None:
+            rows = int((self.n_plots + 1) ** 0.5)
+            cols = int(np.ceil(self.n_plots / rows))
+            layout = (rows, cols)
+        else:
+            rows, cols = layout
+
+        # Calculate the base figure size
+        if figsize is None:
+            # default, each axes subplot has some reasonable size
+            # TODO: Handle cols = -1 or rows = -1 case
+            figsize = (cols * 4, rows * 3)
+
+        # Initialize the subplot grid
+        if fig is None and axes is None:
+            kwargs: Dict[str, Any] = dict(
+                figsize=figsize
+            )
+            import matplotlib.pyplot as plt   # lazy load
+            fig, axes = plt.subplots(rows, cols, **kwargs)
+        elif fig is None and axes is not None:
+            fig = axes.flat[0].get_figure()
+        else:
+            raise ValueError("If fig is given, axes should be given as well")
+
+        if isinstance(axes, Axes):
+            axes = np.asarray([axes], dtype=object)
+        elif not isinstance(axes, np.ndarray):
+            axes = np.asarray(axes)
+
+        self._fig: Figure = fig
+        self._axes: np.ndarray = axes
+
+        if len(self._axes.flat) < len(y_names):
+            raise ValueError(
+                "Grid size is %d * %d = %d, smaller than len(y) = %d" % (
+                    rows, cols, len(self._axes.flat), len(y_names)))
+
+    @property
+    def fig(self) -> Figure:
+        return self._fig
+
+    @property
+    def figure(self) -> Figure:
+        return self._fig
+
+    def _ipython_display_(self):
+        from IPython.display import display
+        return display(self.figure)
+
+    @property
+    def axes(self) -> np.ndarray:  # array[Axes]
+        """Return a grid of subplots (2D ndarray)."""
+        return self._axes
+
+    @property
+    def axes_active(self) -> np.ndarray:  # array[Axes]
+        """Return a flattened ndarray of active subplots (excluding that are
+        turned off), whose length equals `self.n_plots`."""
+        return self.axes.flat[:self.n_plots]
+
+    def set(self, **kwargs):
+        """Set attributes on each subplot Axes."""
+        for ax in self.axes.flat:
+            ax.set(**kwargs)
+        return self
+
+    def savefig(self, *args, **kwargs):
+        """Save the figure."""
+        kwargs = kwargs.copy()
+        kwargs.setdefault("bbox_inches", "tight")
+        self.fig.savefig(*args, **kwargs)
 
 
 class HypothesisPlotter:
@@ -89,7 +191,9 @@ class HypothesisPlotter:
                  rolling=None,
                  ignore_unknown: bool = False,
                  prettify_labels: bool = True,
-                 **kwargs):
+                 grid: Optional[GridPlot] = None,
+                 ax: Optional[Union[Axes, np.ndarray]] = None,
+                 **kwargs) -> GridPlot:
         '''
         Hypothesis.plot based on matplotlib.
 
@@ -113,15 +217,22 @@ class HypothesisPlotter:
               shaded area. Defaults 0.2,
             - runs_alpha (float): If not None, will draw an individual line
               for each run. Defaults 0.2.
+            - ax (Axes or ndarray of Axes): Subplot axes to draw plots on.
+              Note that this is mutually exclusive with `grid`.
+            - grid (GridPlot): A `GridPlot` instance (optional) to use for
+              matplotlib figure and axes. If this is given, `ax` must be None.
 
         All other kwargs is passed to DataFrame.plot(). For example, you may
         find the following parameters useful:
             `x`, `y`, `layout`, `figsize`, `ax`, `legend`, etc.
 
+        Returns:
+            A `GridPlot` instance. If you need to access subplot fig and axes,
+            use `g.fig` and `g.axes`, etc.
         '''
         if len(self.runs) == 0:
             # nothing to plot, do nothing
-            return
+            return GridPlot()
 
         if 'x' not in kwargs:
             # index (same across runs) being x value, so we can simply average
@@ -201,7 +312,18 @@ class HypothesisPlotter:
                              err_style=err_style,
                              std_alpha=std_alpha, runs_alpha=runs_alpha,
                              prettify_labels=prettify_labels,
-                             args=args, kwargs=kwargs)
+                             grid=grid, ax=ax,
+                             args=args, kwargs=kwargs)  # type: ignore
+
+    def _validate_ax_with_y(self, ax, y):
+        if not isinstance(ax, (Axes, np.ndarray)):
+            raise TypeError("`ax` must be a single Axes or a ndarray of Axes, "
+                            "but given {}".format(ax))
+        if isinstance(ax, Axes):
+            ax = np.asarray([ax], dtype=object)
+        if len(ax) != len(y):
+            raise ValueError("The length of `ax` and `y` must be equal: "
+                             "ax = {}, y = {}".format(len(ax), len(y)))
 
     def _do_plot(self,
                  y: List[str],
@@ -215,9 +337,12 @@ class HypothesisPlotter:
                  std_alpha: float,
                  runs_alpha: float,
                  prettify_labels: bool = True,
+                 grid: Optional[GridPlot] = None,
+                 ax: Optional[Union[Axes, np.ndarray]] = None,
                  args: List,
                  kwargs: Dict,
-                 ):
+                 ) -> GridPlot:
+
         # Fill-in sensible defaults.
         if subplots:  # mode (1) -- separate subplots
             title = list(y)
@@ -230,30 +355,39 @@ class HypothesisPlotter:
             kwargs.update(dict(y=y, title=title,
                                color=color, label=label))
 
-            if 'ax' in kwargs and isinstance(kwargs['ax'], np.ndarray):
-                kwargs['ax'] = kwargs['ax'].flatten()[:len(y)]
-
-            # automatic grid-like layout
-            if 'layout' not in kwargs:
-                rows = int((len(y) + 1) ** 0.5)
-                cols = int(np.ceil(len(y) / rows))
-                kwargs['layout'] = (rows, cols)
+            if grid is None:
+                if ax is not None:
+                    # TODO: ignore figsize, layout, etc.
+                    self._validate_ax_with_y(ax, y)
+                    grid = GridPlot(y_names=y,
+                                    axes=ax)
+                else:
+                    grid = GridPlot(y_names=y,
+                                    layout=kwargs.get('layout', None),
+                                    figsize=kwargs.get('figsize', None))
             else:
-                rows, cols = kwargs['layout']
+                if ax is not None:
+                    raise ValueError("Either one of `grid` and `ax` can be given.")
+                self._validate_ax_with_y(grid.axes_active, y)
 
-            if 'figsize' not in kwargs:
-                # default, each axes subplot has some reasonable size
-                kwargs['figsize'] = (cols * 4, rows * 3)
+            # we have made sure that ax is always associated with grid.
+            ax = grid.axes_active
 
         else:  # mode (2) -- everything in a single axesplot
+            # TODO: This mode is deprecated, will not work anymore
             if not kwargs.get('title', None):
                 kwargs['title'] = self.name
 
-        if isinstance(kwargs.get('ax', None), np.ndarray) and 'layout' in kwargs:
+            grid = GridPlot(y_names=[kwargs['title']],
+                            layout=(1, 1),
+                            figsize=kwargs.get('figsize', None))
+            ax = grid.axes[0]
+
+        if isinstance(ax, np.ndarray) and 'layout' in kwargs:
             # avoid matplotlib warning: when multiple axes are passed,
             # layout are ignored.
             del kwargs['layout']
-        axes = mean.plot(*args, subplots=subplots, **kwargs)
+        axes = mean.plot(*args, subplots=subplots, ax=ax, **kwargs)
 
         if err_style not in self.KNOWN_ERR_STYLES:
             raise ValueError(f"Unknown err_style '{err_style}', "
@@ -284,15 +418,14 @@ class HypothesisPlotter:
                     df.plot(ax=ax, x=x, y=yi, legend=False, label='',
                             color=color, alpha=runs_alpha)
 
-
-        # some sensible styling (grid, tight_layout)
-        axes_arr = np.asarray(axes).flat
+        # some sensible styling (grid, tight_layout) AFTER calling plot()
+        # Note: 'kwargs[grid]' is for axes and 'grid' means GridPlot
         if kwargs.get('grid', True):
-            for ax in axes_arr:
+            for ax in grid.axes_active:
                 ax.grid(which='both', alpha=0.5)
-        fig = axes_arr[0].get_figure()
+        fig = grid.figure
         fig.tight_layout()
-        return axes
+        return grid
 
 
 class HypothesisHvPlotter(HypothesisPlotter):
@@ -386,8 +519,8 @@ class ExperimentPlotter:
     def _hypotheses(self):
         return self._parent._hypotheses
 
-    def __call__(self, *args, ax=None,
-                 colors=None, **kwargs):
+    def __call__(self, *args, grid=None,
+                 colors=None, **kwargs) -> GridPlot:
         '''
         Experiment.plot.
 
@@ -435,12 +568,14 @@ class ExperimentPlotter:
                         kwargs['label'] = util.prettify_labels(kwargs['label'])
                 kwargs['subplots'] = True
             kwargs['color'] = colors[i]
-            ax = hypo.plot(*args, ax=ax, **kwargs)    # on the same ax(es)?
+            grid = hypo.plot(*args, grid=grid, **kwargs)    # on the same ax(es)?
 
-        if isinstance(ax, Axes) and isinstance(y, str):
-            ax.set_ylabel(kwargs['y'])
+        # corner case: if there is only one column, use it as a label
+        if len(grid.axes_active) == 1 and isinstance(y, str):
+            grid.axes_active[0].set_ylabel(y)
 
-        return ax
+        assert grid is not None
+        return grid
 
 
 HypothesisPlotter.__doc__ = HypothesisPlotter.__call__.__doc__
