@@ -383,9 +383,10 @@ class Experiment(Iterable[Hypothesis]):
 
     @property
     def columns(self) -> Iterable[str]:
-        y: Set[str] = set()
+        # merge and uniquify all columns but preserving the order.
+        y: Dict[str, Any] = collections.OrderedDict()
         for h in self._hypotheses.values():
-            y.update(h.columns)
+            y.update(collections.OrderedDict.fromkeys(h.columns))
         return list(y)
 
     @staticmethod
