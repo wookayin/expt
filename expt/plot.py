@@ -231,16 +231,20 @@ class HypothesisPlotter:
             use `g.fig` and `g.axes`, etc.
         '''
         if len(self.runs) == 0:
-            # nothing to plot, do nothing
-            return GridPlot()
+            raise ValueError("No data to plot, hypothesis.run is empty.")
+
+        grouped = self.grouped
+        if len(grouped) == 0:
+            # nothing to draw (no rows)
+            raise ValueError("No data to plot, all runs have a empty DataFrame.")
 
         if 'x' not in kwargs:
             # index (same across runs) being x value, so we can simply average
-            mean, std = self.grouped.mean(), self.grouped.std()
+            mean, std = grouped.mean(), grouped.std()
         else:
             # might have different x values --- we need to interpolate.
             # (i) check if the x-column is consistent?
-            if n_samples is None and np.any(self.grouped.nunique()[kwargs['x']] > 1):
+            if n_samples is None and np.any(grouped.nunique()[kwargs['x']] > 1):
                 warnings.warn(
                     f"The x value (column `{kwargs['x']}`) is not consistent "
                     "over different runs. Automatically falling back to the "
@@ -250,7 +254,7 @@ class HypothesisPlotter:
                 )
                 n_samples = 10000
             else:
-                mean, std = self.grouped.mean(), self.grouped.std()
+                mean, std = grouped.mean(), grouped.std()
 
         if n_samples is not None:
             # subsample by interpolation, then average.
@@ -568,6 +572,13 @@ class ExperimentPlotter:
                         kwargs['label'] = util.prettify_labels(kwargs['label'])
                 kwargs['subplots'] = True
             kwargs['color'] = colors[i]
+
+            # exclude the hypothesis if it has no runs in it
+            if not len(hypo.grouped):
+                warnings.warn(f"Hypothesis `{hypo.name}` has no data, "
+                              "ignoring it", UserWarning)
+                continue
+
             grid = hypo.plot(*args, grid=grid, **kwargs)    # on the same ax(es)?
 
         # corner case: if there is only one column, use it as a label
