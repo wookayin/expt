@@ -1,7 +1,8 @@
+from typing import List
+import collections
+
 import numpy as np
 from scipy import interpolate
-
-from typing import List
 from typeguard import typechecked
 
 
@@ -19,3 +20,13 @@ def prettify_labels(labels: List[str]) -> List[str]:
     labels = [_truncate(l) for l in labels]
 
     return labels
+
+
+def merge_list(*lst):
+    """Merge given lists into one without duplicated entries. Orders are
+    preserved as in the order of each of the flattened elements appear."""
+
+    merged = {}
+    for l in lst:
+        merged.update(collections.OrderedDict.fromkeys(l))
+    return list(merged)

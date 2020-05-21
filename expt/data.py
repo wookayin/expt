@@ -26,7 +26,7 @@ of hypotheses or algorithms applied over different environments or dataset).
 
 import collections
 import itertools
-from typing import Any, Union, Dict, Iterable, Iterator, Optional
+from typing import Any, Union, Dict, Iterable, Iterator, Callable, Optional
 from typing import List, Tuple, Set, Sequence, Mapping, MutableMapping
 from typeguard import typechecked
 
@@ -45,6 +45,7 @@ from pandas.core.groupby.generic import DataFrameGroupBy
 from dataclasses import dataclass      # for python 3.6, backport needed
 
 from . import plot as _plot
+from . import util
 from .path_util import glob, exists, open, isdir
 
 
@@ -209,31 +210,25 @@ class Hypothesis(Iterable[Run]):
 
     @property
     def columns(self) -> Iterable[str]:
-        g = self.grouped
-        if len(g) == 0: return pd.Index([])
-        return g.mean().columns.values
+        return util.merge_list(*[df.columns for df in self._dataframes])
 
     def rolling(self, *args, **kwargs):
         return self.grouped.rolling(*args, **kwargs)
 
     def mean(self, *args, **kwargs) -> pd.DataFrame:
         g = self.grouped
-        if len(g) == 0: return pd.DataFrame()
         return g.mean(*args, **kwargs)
 
     def std(self, *args, **kwargs) -> pd.DataFrame:
         g = self.grouped
-        if len(g) == 0: return pd.DataFrame()
         return g.std(*args, **kwargs)
 
     def min(self, *args, **kwargs) -> pd.DataFrame:
         g = self.grouped
-        if len(g) == 0: return pd.DataFrame()
         return g.min(*args, **kwargs)
 
     def max(self, *args, **kwargs) -> pd.DataFrame:
         g = self.grouped
-        if len(g) == 0: return pd.DataFrame()
         return g.max(*args, **kwargs)
 
 
@@ -384,10 +379,7 @@ class Experiment(Iterable[Hypothesis]):
     @property
     def columns(self) -> Iterable[str]:
         # merge and uniquify all columns but preserving the order.
-        y: Dict[str, Any] = collections.OrderedDict()
-        for h in self._hypotheses.values():
-            y.update(collections.OrderedDict.fromkeys(h.columns))
-        return list(y)
+        return util.merge_list(*[h.columns for h in self._hypotheses.values()])
 
     @staticmethod
     def AGGREGATE_MEAN_LAST(portion: float):
