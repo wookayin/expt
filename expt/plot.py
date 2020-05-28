@@ -417,6 +417,8 @@ class HypothesisPlotter:
                     else self._dataframes
 
                 for df in df_individuals:
+                    if not yi in df:
+                        continue
                     if rolling:
                         df = df.rolling(rolling, min_periods=1, center=True).mean()
                     df.plot(ax=ax, x=x, y=yi, legend=False, label='',
