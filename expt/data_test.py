@@ -106,9 +106,20 @@ class TestDataStructure:
         assert list(r['r0']) == [1, 2, 3]
 
         # fancy index
+        # ----------------
+        # (1) by integer index
         r = V(ex[[0, 1]])
         assert r[0] is h0 and r[1] is h1
+        # (2) by name?
         r = V(ex[['hyp1', 'hyp0']])
+        assert r[0] is h1 and r[1] is h0
+        # (3) boolean index (select)
+        r = V(ex[[False, True]])
+        assert len(r) == 1 and r[0] is h1
+        with pytest.raises(IndexError):
+            ex[[False, True, False]]
+        # (4) non-standard iterable
+        r = V(ex[pd.Series([1, 0])])
         assert r[0] is h1 and r[1] is h0
 
         with pytest.raises(NotImplementedError):  # TODO

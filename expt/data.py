@@ -349,17 +349,30 @@ class Experiment(Iterable[Hypothesis]):
                 raise IndexError("out of range: {} (should be < {})".format(
                     key, len(self._hypotheses)))
             return self._hypotheses[name]
-        elif isinstance(key, list) or isinstance(key, np.ndarray):
-            # fancy indexing through int?  # TODO: support str
-            hypo_keys = list(self._hypotheses.keys())
-            to_key = lambda k: k if isinstance(k, str) else hypo_keys[k]
-            return [self._hypotheses[to_key(k)] for k in key]
         elif isinstance(key, tuple):
             hypo_key, column = key
             hypos = self[hypo_key]
             if isinstance(hypos, list):
                 raise NotImplementedError("2-dim fancy indexing is not implementd")
             return hypos[column]   # type: ignore
+        elif isinstance(key, Iterable):
+            key = list(key)
+            if all(isinstance(k, bool) for k in key):
+                # fancy indexing through bool
+                if len(key) != len(self._hypotheses):
+                    raise IndexError(
+                        "boolean index did not match indexed array along"
+                        " dimension 0; dimension is {} but corresponding "
+                        " boolean dimension is {}".format(
+                            len(self._hypotheses), len(key)))
+                r = np.empty(len(key), dtype=object)
+                r[:] = list(self._hypotheses.values())
+                return r[key]
+            else:
+                # fancy indexing through int?  # TODO: support str
+                hypo_keys = list(self._hypotheses.keys())
+                to_key = lambda k: k if isinstance(k, str) else hypo_keys[k]
+            return [self._hypotheses[to_key(k)] for k in key]
         else:
             raise ValueError("Unsupported index: {}".format(key))
 
