@@ -59,11 +59,12 @@ class GridPlot:
 
         # Initialize the subplot grid
         if fig is None and axes is None:
-            kwargs: Dict[str, Any] = dict(
-                figsize=figsize
+            subplots_kwargs: Dict[str, Any] = dict(
+                figsize=figsize,
+                squeeze=False,
             )
             import matplotlib.pyplot as plt   # lazy load
-            fig, axes = plt.subplots(rows, cols, **kwargs)
+            fig, axes = plt.subplots(rows, cols, **subplots_kwargs)
         elif fig is None and axes is not None:
             fig = axes.flat[0].get_figure()
         else:
@@ -96,7 +97,7 @@ class GridPlot:
 
     @property
     def axes(self) -> np.ndarray:  # array[Axes]
-        """Return a grid of subplots (2D ndarray)."""
+        """Return a grid of subplots (always a 2D ndarray)."""
         return self._axes
 
     @property
@@ -363,8 +364,10 @@ class HypothesisPlotter:
                 if ax is not None:
                     # TODO: ignore figsize, layout, etc.
                     self._validate_ax_with_y(ax, y)
-                    grid = GridPlot(y_names=y,
-                                    axes=ax)
+                    axes = np.asarray(ax)  # ensure to be a 2D array of Axes
+                    if len(axes.shape) < 2:
+                        axes = axes.reshape(1, -1)
+                    grid = GridPlot(y_names=y, axes=axes)
                 else:
                     grid = GridPlot(y_names=y,
                                     layout=kwargs.get('layout', None),
