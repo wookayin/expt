@@ -84,6 +84,12 @@ class Run:
         return 'Run({path!r}, df with {rows} rows)'.format(
             path=self.path, rows=len(self.df))
 
+    @property
+    def name(self) -> str:
+        '''Returns the last segment of the path.'''
+        path = self.path.rstrip('/')
+        return os.path.basename(path)
+
     def as_hypothesis(self):
         '''Contains a Hypothesis consisting of this run only.'''
         return Hypothesis.of(self)
@@ -141,6 +147,20 @@ class RunList(Sequence[Run]):
         """Create a new copy of list containing all the runs."""
         return list(self._runs)
 
+    def filter(self, fn: Union[Callable[[Run], bool], str]) -> 'RunList':
+        '''Apply a filter function (Run -> bool) and return the filtered runs
+        as another RunList. If a string is given, we convert it as a matcher
+        function (see fnmatch) that matches run.name'''
+        if isinstance(fn, str):
+            pat = str(fn)
+            fn = lambda run: fnmatch.fnmatch(run.name, pat)
+        return RunList(filter(fn, self._runs))
+
+    def to_hypothesis(self, name: str) -> 'Hypothesis':
+        '''Create a new Hypothesis instance containing all the runs
+        as the current RunList instance.'''
+        return Hypothesis.of(self, name=name)
+
 
 @dataclass
 class Hypothesis(Iterable[Run]):
@@ -154,7 +174,7 @@ class Hypothesis(Iterable[Run]):
             runs = [runs]  # type: ignore
 
         self.name = name
-        self.runs = RunList.of(runs)
+        self.runs = RunList(runs)
 
     def __iter__(self) -> Iterator[Run]:
         return iter(self.runs)
@@ -323,7 +343,7 @@ class Experiment(Iterable[Hypothesis]):
 
     def __repr__(self) -> str:
         return (
-            f"Experiment('{self.name}', {len(self._hypotheses)} hypotheses: [ \n" +
+            f"Experiment('{self.name}', {len(self._hypotheses)} hypotheses: [ \n " +
             '\n '.join([repr(exp) for exp in self._hypotheses]) +
             "\n])"
         )

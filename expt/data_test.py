@@ -24,11 +24,18 @@ def V(x):
     print(x, **kwargs)
     return x
 
-
-class TestDataStructure:
-
+class _TestBase:
     def setup_method(self, method):
         sys.stdout.write("\n")
+
+
+class TestRunList(_TestBase):
+
+    def _fixture(self) -> RunList:
+       return RunList(
+            Run("r%d" % i, pd.DataFrame({"x": [i]}))
+            for i in range(16)
+       )
 
     def testRunList(self):
         # instantiation
@@ -55,6 +62,35 @@ class TestDataStructure:
         r2 = Run("r1", pd.DataFrame({"y" : [2, 2, 2]}))
         runs.extend([r2])
         assert len(runs) == 3
+
+    def testRunListFilter(self):
+        runs = self._fixture()
+
+        # basic operations
+        filtered = V(runs.filter(lambda run: run.name in ["r1", "r7"]))
+        assert len(filtered) == 2
+        assert list(filtered) == [runs[1], runs[7]]
+
+        # invalid argument (fn)
+        with pytest.raises(TypeError):
+            runs.filter([lambda run: True])
+
+        # filter by string (special case)
+        filtered = V(runs.filter("r1*"))  # 1, 10-15
+        assert len(filtered) == 7
+
+    def testToHypothesis(self):
+        runs = self._fixture()
+        h = V(runs.to_hypothesis(name="runlist"))
+        assert isinstance(h, Hypothesis)
+        assert h.name == "runlist"
+        assert not (h.runs is runs)   # should make a new instance
+
+        for i in range(16):
+            assert h.runs[i] is runs[i]
+
+
+class TestHypothesis(_TestBase):
 
     def testHypothesisCreation(self):
         # instance creation (with auto type conversion)
@@ -85,6 +121,9 @@ class TestDataStructure:
     def testHypothesisData(self):
         # test gropued, columns, mean, std, min, max, etc.
         pass
+
+
+class TestExperiment(_TestBase):
 
     def testExperimentIndexing(self):
         h0 = Hypothesis("hyp0", Run('r0', pd.DataFrame({"a": [1, 2, 3]})))
