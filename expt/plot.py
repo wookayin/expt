@@ -25,7 +25,7 @@ class GridPlot:
 
     def __init__(self, *,
                  fig: Optional[Figure] = None,
-                 axes: Optional[np.ndarray] = None,
+                 axes: Optional[Union[np.ndarray, Axes]] = None,
                  y_names: List[str],
                  layout: Optional[Tuple[int, int]] = None,
                  figsize: Optional[Tuple[int, int]] = None,
@@ -66,14 +66,17 @@ class GridPlot:
             import matplotlib.pyplot as plt   # lazy load
             fig, axes = plt.subplots(rows, cols, **subplots_kwargs)
         elif fig is None and axes is not None:
+            if isinstance(axes, np.ndarray):
+                if len(axes.shape) != 2:
+                    raise ValueError(
+                        "When axes is a ndarray of Axes, the rank should be "
+                        "2 (but given {})".format(len(axes.shape)))
+            else:
+                # ensure axes is a 2D array of Axes
+                axes = np.asarray(axes, dtype=object).reshape([1, 1])
             fig = axes.flat[0].get_figure()
         else:
             raise ValueError("If fig is given, axes should be given as well")
-
-        if isinstance(axes, Axes):
-            axes = np.asarray([axes], dtype=object)
-        elif not isinstance(axes, np.ndarray):
-            axes = np.asarray(axes)
 
         self._fig: Figure = fig
         self._axes: np.ndarray = axes
@@ -364,10 +367,7 @@ class HypothesisPlotter:
                 if ax is not None:
                     # TODO: ignore figsize, layout, etc.
                     self._validate_ax_with_y(ax, y)
-                    axes = np.asarray(ax)  # ensure to be a 2D array of Axes
-                    if len(axes.shape) < 2:
-                        axes = axes.reshape(1, -1)
-                    grid = GridPlot(y_names=y, axes=axes)
+                    grid = GridPlot(y_names=y, axes=ax)
                 else:
                     grid = GridPlot(y_names=y,
                                     layout=kwargs.get('layout', None),

@@ -75,7 +75,15 @@ class TestHypothesisPlot:
             g = hypothesis.plot(y=["loss", "accuracy"], ax=ax)
         assert "The length of `ax` and `y` must be equal" in str(ex.value)
 
-        # two y's given two axesplots
+        # two y's, given a 1D array of axesplots: error
+        fig, axes = plt.subplots(1, 2)
+        assert axes.shape == (2,)
+        with pytest.raises(ValueError) as ex:
+            g = hypothesis.plot(y=["loss", "accuracy"], ax=axes)
+            #assert g.axes.shape == (1, 2)
+        assert "the rank should be 2 (but given 1)" in str(ex.value)
+
+        # two y's, given 2D array of axesplots
         fig, axes = plt.subplots(2, 1, squeeze=False)
         g = hypothesis.plot(y=["loss", "accuracy"], ax=axes)
         assert g.axes.shape == (2, 1)
