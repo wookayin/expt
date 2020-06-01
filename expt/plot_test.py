@@ -30,7 +30,8 @@ class TestHypothesisPlot:
     def setup_method(self, method):
         sys.stdout.write("\n")
 
-    def _fixture(self) -> Hypothesis:
+    @staticmethod
+    def _fixture() -> Hypothesis:
         data = dict()
         data['step'] = np.arange(1000)
         data['loss'] = np.exp((-data['step'] + 700) / 1000.0)
@@ -89,3 +90,41 @@ class TestHypothesisPlot:
         assert g.axes.shape == (2, 1)
         assert g.axes_active[0] is axes.flat[0]
         assert g.axes_active[1] is axes.flat[1]
+
+
+class TestExperimentPklot:
+
+    def setup_method(self, method):
+        sys.stdout.write("\n")
+
+    @staticmethod
+    def _fixture() -> Experiment:
+        # Note different column names (some are shared, some are not)
+        h0 = Hypothesis("hyp0", Run('r0', pd.DataFrame(
+            {"a": [1, 2, 3], "b0": [10, 9, 8]})))
+        h1 = Hypothesis("hyp1", Run('r1', pd.DataFrame(
+            {"a": [4, 5, 6], "b1": [7, 6, 5]})))
+        ex = Experiment(title="ex", hypotheses=[h0, h1])
+        return ex
+
+    def testGridPlotBasic(self):   # TODO: Add more complex scenario.
+        ex = self._fixture()
+
+        # plot all known columns
+        g = V(ex.plot())
+        assert g.axes.shape == (2, 2)
+        assert len(g.axes_active) == 3  # a, b0, b1
+
+        # __getitem__ operator
+        # TODO: validate contents
+        assert g['a'] is g.axes_active[0]
+        assert g['b0'] is g.axes_active[1]
+        assert g['b1'] is g.axes_active[2]
+        for y in ('a', 'b0', 'b1'):
+            assert g[y].get_title() == y
+
+        with pytest.raises(ValueError) as ex:
+            g['b']
+        assert 'Unknown index: b' in V(str(ex.value))
+        assert "['b1', 'b0']" in str(ex.value) or \
+               "['b0', 'b1']" in str(ex.value)

@@ -2,6 +2,7 @@
 Plotting behavior (matplotlib, hvplot, etc.) for expt.data
 """
 
+import difflib
 import warnings
 from typing import Union, Iterable, Iterator, Optional
 from typing import Tuple, List, Dict, Any
@@ -42,6 +43,7 @@ class GridPlot:
         if not y_names:
             raise ValueError("y_names should be a non-empty array.")
         self.n_plots = len(y_names)
+        self._y_names = y_names
 
         # Compute the grid shape
         if layout is None:
@@ -108,6 +110,21 @@ class GridPlot:
         """Return a flattened ndarray of active subplots (excluding that are
         turned off), whose length equals `self.n_plots`."""
         return self.axes.flat[:self.n_plots]
+
+    def __getitem__(self, key) -> Union[Axes, np.ndarray]:
+        if isinstance(key, str):
+            # find axes by name
+            try:
+                index = self._y_names.index(key)
+            except (ValueError, IndexError) as e:
+                raise ValueError(
+                    "Unknown index: {}. Close matches: {}".format(
+                        key, difflib.get_close_matches(key, self._y_names)
+                    )) from e
+            # TODO: support fancy indeing (multiple keys)
+            return self.axes_active[index]
+        else:
+            raise TypeError("Unsupported index : {}".format(type(key)))
 
     def set(self, **kwargs):
         """Set attributes on each subplot Axes."""
@@ -451,6 +468,8 @@ class HypothesisHvPlotter(HypothesisPlotter):
                  std_alpha: Optional[float],
                  runs_alpha: Optional[float],
                  prettify_labels: bool = False,
+                 ax = None,
+                 grid = None,
                  args: List,
                  kwargs: Dict,
                  ):
@@ -585,6 +604,7 @@ class ExperimentPlotter:
                               "ignoring it", UserWarning)
                 continue
 
+            kwargs['ignore_unknown'] = True
             grid = hypo.plot(*args, grid=grid, **kwargs)    # on the same ax(es)?
 
         # corner case: if there is only one column, use it as a label
