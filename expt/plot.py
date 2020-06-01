@@ -528,6 +528,10 @@ class ExperimentPlotter:
     def _hypotheses(self):
         return self._parent._hypotheses
 
+    @property
+    def _columns(self) -> List[str]:
+        return self._parent.columns
+
     def __call__(self, *args, grid=None,
                  colors=None, **kwargs) -> GridPlot:
         '''
@@ -544,10 +548,7 @@ class ExperimentPlotter:
         y = kwargs.get('y', None)
         if y is None:
             # draw all known columns by default
-            y = set()
-            for h in self._hypotheses.values():
-                y.update(h.columns)
-            y = list(y)
+            y = list(self._columns)
             if 'x' in kwargs:
                 y = [yi for yi in y if yi != kwargs['x']]
             kwargs['y'] = y
