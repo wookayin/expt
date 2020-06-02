@@ -32,6 +32,7 @@ from typeguard import typechecked
 
 import sys
 import types
+import fnmatch
 import os.path
 import pprint
 from multiprocessing.pool import ThreadPool
@@ -155,6 +156,11 @@ class RunList(Sequence[Run]):
             pat = str(fn)
             fn = lambda run: fnmatch.fnmatch(run.name, pat)
         return RunList(filter(fn, self._runs))
+
+    def map(self, func: Callable[[Run], Any]) -> List:
+        '''Apply func for each of the runs. Return the transformation
+        as a plain list.'''
+        return list(map(func, self._runs))
 
     def to_hypothesis(self, name: str) -> 'Hypothesis':
         '''Create a new Hypothesis instance containing all the runs

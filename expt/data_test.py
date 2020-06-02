@@ -79,6 +79,11 @@ class TestRunList(_TestBase):
         filtered = V(runs.filter("r1*"))  # 1, 10-15
         assert len(filtered) == 7
 
+    def testRunListMap(self):
+        runs = self._fixture()
+        t = V(runs.map(lambda run: run.name))
+        assert t == ["r%d" % i for i in range(16)]
+
     def testToHypothesis(self):
         runs = self._fixture()
         h = V(runs.to_hypothesis(name="runlist"))
