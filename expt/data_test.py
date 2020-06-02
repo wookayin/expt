@@ -63,6 +63,18 @@ class TestRunList(_TestBase):
         runs.extend([r2])
         assert len(runs) == 3
 
+    def testRunListSlice(self):
+        runs = self._fixture()
+
+        # slice (sublist) should be a RunList
+        o = V(runs[:5])
+        assert isinstance(o, RunList)
+        assert [r.name for r in o] == ["r0", "r1", "r2", "r3", "r4"]
+
+        o = V(runs[-2:5:-2])
+        assert [r.name for r in o] == ["r14", "r12", "r10", "r8", "r6"]
+
+
     def testRunListFilter(self):
         runs = self._fixture()
 

@@ -133,7 +133,10 @@ class RunList(Sequence[Run]):
         return runs
 
     def __getitem__(self, index_or_slice):
-        return self._runs[index_or_slice]
+        o = self._runs[index_or_slice]
+        if isinstance(index_or_slice, slice):
+            o = RunList(o)
+        return o
 
     def __len__(self):
         return len(self._runs)
