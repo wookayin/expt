@@ -212,6 +212,7 @@ class HypothesisPlotter:
                  rolling=None,
                  ignore_unknown: bool = False,
                  prettify_labels: bool = True,
+                 suptitle: Optional[str] = None,
                  grid: Optional[GridPlot] = None,
                  ax: Optional[Union[Axes, np.ndarray]] = None,
                  **kwargs) -> GridPlot:
@@ -228,6 +229,8 @@ class HypothesisPlotter:
               equidistant points over the x axis. Values will be interpolated.
             - prettify_labels (bool): If True (default), apply a sensible
               default prettifier to the legend labels, truncating long names.
+            - suptitle (str): suptitle for the figure. Defaults to the name
+              of the hypothesis. Use empty string("") to disable suptitle.
             - err_style (str): How to show individual runs (traces) or
               confidence interval as shaded area.
               Possible values: (None, 'runs', 'unit_traces', 'band', 'fill')
@@ -332,11 +335,15 @@ class HypothesisPlotter:
             mean = mean.rolling(rolling, min_periods=1, center=True).mean()
             std = std.rolling(rolling, min_periods=1, center=True).mean()
 
+        if suptitle is None:
+            suptitle = self._parent.name
+
         return self._do_plot(y, mean, std, n_samples=n_samples,
                              subplots=subplots, rolling=rolling,
                              err_style=err_style,
                              std_alpha=std_alpha, runs_alpha=runs_alpha,
                              prettify_labels=prettify_labels,
+                             suptitle=suptitle,
                              grid=grid, ax=ax,
                              args=args, kwargs=kwargs)  # type: ignore
 
@@ -362,6 +369,7 @@ class HypothesisPlotter:
                  std_alpha: float,
                  runs_alpha: float,
                  prettify_labels: bool = True,
+                 suptitle: Optional[str],
                  grid: Optional[GridPlot] = None,
                  ax: Optional[Union[Axes, np.ndarray]] = None,
                  args: List,
@@ -449,7 +457,12 @@ class HypothesisPlotter:
         if kwargs.get('grid', True):
             for ax in grid.axes_active:
                 ax.grid(which='both', alpha=0.5)
+
+        # add figure title
         fig = grid.figure
+        if suptitle:
+            _add_suptitle(fig, suptitle)
+
         fig.tight_layout()
         return grid
 
@@ -468,6 +481,7 @@ class HypothesisHvPlotter(HypothesisPlotter):
                  std_alpha: Optional[float],
                  runs_alpha: Optional[float],
                  prettify_labels: bool = False,
+                 suptitle: Optional[str],
                  ax = None,
                  grid = None,
                  args: List,
@@ -551,7 +565,9 @@ class ExperimentPlotter:
     def _columns(self) -> List[str]:
         return self._parent.columns
 
-    def __call__(self, *args, grid=None,
+    def __call__(self, *args,
+                 suptitle: Optional[str] = None,
+                 grid=None,
                  colors=None, **kwargs) -> GridPlot:
         '''
         Experiment.plot.
@@ -605,14 +621,34 @@ class ExperimentPlotter:
                 continue
 
             kwargs['ignore_unknown'] = True
+            kwargs['suptitle'] = ''   # no suptitle for each hypo
             grid = hypo.plot(*args, grid=grid, **kwargs)    # on the same ax(es)?
 
         # corner case: if there is only one column, use it as a label
         if len(grid.axes_active) == 1 and isinstance(y, str):
             grid.axes_active[0].set_ylabel(y)
 
+        # title, etc.
+        if suptitle is None:
+            suptitle = self._parent.name
+        _add_suptitle(grid.figure, suptitle)
+
         assert grid is not None
         return grid
+
+
+# Protected Utilities
+def _add_suptitle(fig, suptitle, fontsize='x-large', y=1.02, **kwargs):
+    if suptitle is None:
+        raise ValueError("suptitle should not be None")
+
+    if isinstance(suptitle, str):
+        # For default y value, refer to https://stackoverflow.com/questions/8248467
+        fig.suptitle(suptitle, fontsize=fontsize, y=y, **kwargs)
+    elif isinstance(suptitle, dict):
+        fig.suptitle(**suptitle)
+    else:
+        raise TypeError("Expected str or dict for suptitle: {}".format(suptitle))
 
 
 HypothesisPlotter.__doc__ = HypothesisPlotter.__call__.__doc__
