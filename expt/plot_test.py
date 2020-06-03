@@ -115,7 +115,7 @@ class TestExperimentPklot:
         assert g.axes.shape == (2, 2)
         assert len(g.axes_active) == 3  # a, b0, b1
 
-        # __getitem__ operator
+        # __getitem__ (str)
         # TODO: validate contents
         assert g['a'] is g.axes_active[0]
         assert g['b0'] is g.axes_active[1]
@@ -128,3 +128,8 @@ class TestExperimentPklot:
         assert 'Unknown index: b' in V(str(ex.value))
         assert "['b1', 'b0']" in str(ex.value) or \
                "['b0', 'b1']" in str(ex.value)
+
+        # __getitem__ (int)
+        assert g[0] is g.axes_active[0]
+        assert g[1] is g.axes_active[1]
+        assert g[-1] is g.axes_active[2]  # we have 3 active axes

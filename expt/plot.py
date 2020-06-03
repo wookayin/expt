@@ -123,6 +123,10 @@ class GridPlot:
                     )) from e
             # TODO: support fancy indeing (multiple keys)
             return self.axes_active[index]
+        elif isinstance(key, int):
+            # find axes by index
+            index = key
+            return self.axes_active[index]
         else:
             raise TypeError("Unsupported index : {}".format(type(key)))
 
