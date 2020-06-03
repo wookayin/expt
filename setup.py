@@ -84,6 +84,7 @@ install_requires = [
     'matplotlib>=3.0.0',
     'pandas>=1.0',
     'multiprocess>=0.70.12',
+    'cached-property>=1.5.1',
 ]
 
 tests_requires = [
