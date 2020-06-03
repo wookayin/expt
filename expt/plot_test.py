@@ -91,8 +91,35 @@ class TestHypothesisPlot:
         assert g.axes_active[0] is axes.flat[0]
         assert g.axes_active[1] is axes.flat[1]
 
+    def testSingleHypothesisLegend(self):
+        hypothesis = self._fixture()
 
-class TestExperimentPklot:
+        # default behavior: no legend
+        g = hypothesis.plot()
+        assert g.figure.legends == []
+        for ax in g.axes_active: assert ax.get_legend() is None
+
+        # boolean (True/False)
+        g = hypothesis.plot(legend=False)
+        for ax in g.axes_active: assert ax.get_legend() is None
+        g = hypothesis.plot(legend=True)
+        for ax in g.axes_active:
+            assert len(ax.get_legend().texts) == 1
+
+        # int/str
+        g = hypothesis.plot(legend='loss')
+        for ax in g.axes_active:
+            assert bool(ax.get_legend()) == (ax.get_title() == 'loss'), str(ax.get_title())
+
+        # dict
+        g = hypothesis.plot(legend=dict(ax=-1, loc='center'))  # the last one: lr
+        for ax in g.axes_active:
+            assert bool(ax.get_legend()) == (ax.get_title() == 'lr'), str(ax.get_title())
+        # https://matplotlib.org/3.2.1/api/_as_gen/matplotlib.pyplot.legend.html
+        assert ax.get_legend()._loc in (10, 'center')
+
+
+class TestExperimentPlot:
 
     def setup_method(self, method):
         sys.stdout.write("\n")
@@ -133,3 +160,33 @@ class TestExperimentPklot:
         assert g[0] is g.axes_active[0]
         assert g[1] is g.axes_active[1]
         assert g[-1] is g.axes_active[2]  # we have 3 active axes
+
+    def testExMultiHypothesisLegend(self):
+        ex = self._fixture()
+
+        # default behavior: a legend on the first subplot (assume >1 subplots)
+        g = ex.plot()
+        assert g.figure.legends == []
+        for k, ax in enumerate(g.axes_active):
+            assert bool(ax.get_legend()) == bool(k == 0)
+            if ax.get_legend():
+                assert len(ax.get_legend().texts) == len(ex.hypotheses)
+
+        # boolean (True/False)
+        g = ex.plot(legend=False)
+        for ax in g.axes_active: assert ax.get_legend() is None
+        g = ex.plot(legend=True)
+        for ax in g.axes_active:
+            assert len(ax.get_legend().texts) == len(ex.hypotheses)  # 2
+
+        # int/str
+        g = ex.plot(legend='a')
+        for ax in g.axes_active:
+            assert bool(ax.get_legend()) == (ax.get_title() == 'a'), str(ax.get_title())
+
+        # dict
+        g = ex.plot(legend=dict(ax=None))  # on the figure:
+        assert g.figure.legends
+        for ax in g.axes_active: assert ax.get_legend() is None
+        # Do we have labels for all of 2 hypotheses?
+        assert len(g.figure.legends[0].texts) == len(ex.hypotheses)

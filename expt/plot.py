@@ -112,6 +112,7 @@ class GridPlot:
         return self.axes.flat[:self.n_plots]
 
     def __getitem__(self, key) -> Union[Axes, np.ndarray]:
+        # Note: see add_legend(ax) as well
         if isinstance(key, str):
             # find axes by name
             try:
@@ -141,6 +142,57 @@ class GridPlot:
         kwargs = kwargs.copy()
         kwargs.setdefault("bbox_inches", "tight")
         self.fig.savefig(*args, **kwargs)
+
+    def clear_legends(self):
+        self.fig.legends[:] = []
+        return self
+
+    def add_legend(self,
+                   ax: Optional[Union[Axes, str, int]] = None,
+                   loc=None, **kwargs):
+        """Put a legend for all objects aggregated over the axes.
+
+        If ax is given, a legend will be put at the specified Axes. If it
+        is str or int (say `k`), `self[k]` will be used instead. Otherwise
+        (i.e., ax=None), the legend will be put on figure-level (if there are
+        more than two Axes), or the unique axis (if there is only one Axes).
+
+        Args:
+            loc: str or pair of floats (see matplotlib.pyplot.legend)
+            kwargs: Additional kwargs passed to ax.legend().
+              e.g., ncol=4
+        """
+        if ax is None:
+            # automatic: figure legend or the (unique) axes
+            if self.n_plots >= 2:
+                target = self.fig
+            else:
+                target = self.axes_active[0]
+        else:
+            if isinstance(ax, (int, str)):   # see __getitem__
+                target = self[ax]
+            else:
+                target = ax
+
+        legend_labels = zip(*[(h, l) for (l, h) in
+                              sorted(self._collect_legend().items())])
+        target.legend(*legend_labels, loc=loc, **kwargs)
+
+        if isinstance(target, Axes) and not target.lines:
+            target.axis('off')
+        return self
+
+    def _collect_legend(self) -> Dict[str, Any]:
+        """Collect all legend labels from the subplot axes."""
+        legend_labels = dict()
+        for ax in self.axes_active:
+            for handle, label in zip(*ax.get_legend_handles_labels()):
+                if label in legend_labels:
+                    # TODO: Add warning/exception if color conflict is found
+                    pass
+                else:
+                    legend_labels[label] = handle
+        return legend_labels
 
 
 class HypothesisPlotter:
@@ -215,6 +267,7 @@ class HypothesisPlotter:
                  n_samples=None,
                  rolling=None,
                  ignore_unknown: bool = False,
+                 legend: Union[bool, int, str, Dict[str, Any]] = False,
                  prettify_labels: bool = True,
                  suptitle: Optional[str] = None,
                  grid: Optional[GridPlot] = None,
@@ -231,6 +284,12 @@ class HypothesisPlotter:
             - rolling (int): A window size for rolling and smoothing.
             - n_samples (int): If given, we subsample using n_samples number of
               equidistant points over the x axis. Values will be interpolated.
+            - legend (bool, int, str, or dict):
+                If True, a legend will be added to each of the subplots.
+                Default is False (no legend). If a dict is given, it will be
+                passed as kwargs to GridPlot.add_legend(). Please see the
+                documentation of `GridPlot.add_legend`.
+                If int or str is given, same meaning as `dict(ax=...)`.
             - prettify_labels (bool): If True (default), apply a sensible
               default prettifier to the legend labels, truncating long names.
             - suptitle (str): suptitle for the figure. Defaults to the name
@@ -346,6 +405,7 @@ class HypothesisPlotter:
                              subplots=subplots, rolling=rolling,
                              err_style=err_style,
                              std_alpha=std_alpha, runs_alpha=runs_alpha,
+                             legend=legend,
                              prettify_labels=prettify_labels,
                              suptitle=suptitle,
                              grid=grid, ax=ax,
@@ -372,6 +432,7 @@ class HypothesisPlotter:
                  err_style: Optional[str],
                  std_alpha: float,
                  runs_alpha: float,
+                 legend: Union[bool, int, str, Dict[str, Any]],
                  prettify_labels: bool = True,
                  suptitle: Optional[str],
                  grid: Optional[GridPlot] = None,
@@ -389,8 +450,15 @@ class HypothesisPlotter:
                 label = util.prettify_labels(label)
 
             # TODO: layout -> grid
+            # Prepare kwargs for DataFrame.plot() call
             kwargs.update(dict(y=y, title=title,
                                color=color, label=label))
+            if not isinstance(legend, bool) and isinstance(legend, (int, str)):
+                legend = dict(ax=legend)
+            if isinstance(legend, dict):
+                kwargs['legend'] = False      # to use aggregated legend
+            else:
+                kwargs['legend'] = bool(legend)
 
             if grid is None:
                 if ax is not None:
@@ -462,6 +530,11 @@ class HypothesisPlotter:
             for ax in grid.axes_active:
                 ax.grid(which='both', alpha=0.5)
 
+        # Add legend by default
+        if legend:
+            if isinstance(legend, dict):
+                grid.add_legend(**legend)
+
         # add figure title
         fig = grid.figure
         if suptitle:
@@ -484,6 +557,7 @@ class HypothesisHvPlotter(HypothesisPlotter):
                  err_style: Optional[str],
                  std_alpha: Optional[float],
                  runs_alpha: Optional[float],
+                 legend: Union[bool, int, str, Dict[str, Any]],
                  prettify_labels: bool = False,
                  suptitle: Optional[str],
                  ax = None,
@@ -571,6 +645,7 @@ class ExperimentPlotter:
 
     def __call__(self, *args,
                  suptitle: Optional[str] = None,
+                 legend: Union[bool, int, str, Dict[str, Any]] = dict(ax=0),
                  grid=None,
                  colors=None, **kwargs) -> GridPlot:
         '''
@@ -581,8 +656,22 @@ class ExperimentPlotter:
         Args:
             subplots:
             y: (Str, Iterable[Str])
+            suptitle (str):
+            legend (bool or dict): Whether to put legend on the GridPlot.
+              - True: Put legend on every individual axes.
+              - False: No legend on any individual axes.
+              - dict: It will be passed as kwargs to GridPlot.add_legend().
+                Examples:
+                  `dict(ax=0)` means to put legend on the first subplot axes,
+                  `dict(ax=None)` means to put legend on the figure itself,
+                  `dict(ax='loss')` means to put legend on the subplot axes
+                    whose title is `loss`.
+              - int: Have a same meaning as dict(ax=...).
+              - str: Have a same meaning as dict(ax=...).
             colors: Iterable[Str]
         '''
+        # Prepare kwargs for Hypothesis.plot().
+
         # TODO extract x-axis
         y = kwargs.get('y', None)
         if y is None:
@@ -596,6 +685,13 @@ class ExperimentPlotter:
             # len(colors) should equal hypothesis. or have as attributes
             from .colors import get_standard_colors
             colors = get_standard_colors(num_colors=len(self._hypotheses))
+
+        if not isinstance(legend, bool) and isinstance(legend, (int, str)):
+            legend = dict(ax=legend)
+        if isinstance(legend, dict):
+            kwargs['legend'] = False      # to use aggregated legend
+        else:
+            kwargs['legend'] = bool(legend)
 
         hypothesis_labels = [name for name, _ in self._hypotheses.items()]
         if kwargs.get('prettify_labels', True):
@@ -631,6 +727,11 @@ class ExperimentPlotter:
         # corner case: if there is only one column, use it as a label
         if len(grid.axes_active) == 1 and isinstance(y, str):
             grid.axes_active[0].set_ylabel(y)
+
+        # Add legend by default
+        if legend:
+            if isinstance(legend, dict):
+                grid.add_legend(**legend)
 
         # title, etc.
         if suptitle is None:
