@@ -80,6 +80,7 @@ install_requires = [
     'typeguard>=2.6.1',
     'matplotlib>=3.0.0',
     'pandas>=1.0',
+    'cached-property>=1.5.1',
 ]
 
 tests_requires = [
