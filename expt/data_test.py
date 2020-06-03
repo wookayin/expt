@@ -74,7 +74,6 @@ class TestRunList(_TestBase):
         o = V(runs[-2:5:-2])
         assert [r.name for r in o] == ["r14", "r12", "r10", "r8", "r6"]
 
-
     def testRunListFilter(self):
         runs = self._fixture()
 
@@ -96,7 +95,7 @@ class TestRunList(_TestBase):
         t = V(runs.map(lambda run: run.name))
         assert t == ["r%d" % i for i in range(16)]
 
-    def testToHypothesis(self):
+    def testRunListToHypothesis(self):
         runs = self._fixture()
         h = V(runs.to_hypothesis(name="runlist"))
         assert isinstance(h, Hypothesis)
@@ -105,6 +104,15 @@ class TestRunList(_TestBase):
 
         for i in range(16):
             assert h.runs[i] is runs[i]
+
+    def testRunListGroupby(self):
+        runs = self._fixture()
+        groups = dict(runs.groupby(lambda run: int(run.name[1:]) % 5))
+        V(groups)
+
+        assert len(groups) == 5
+        assert isinstance(groups[0], Hypothesis)
+        assert groups[0].runs.map(lambda run: run.name) == ["r0", "r5", "r10", "r15"]
 
 
 class TestHypothesis(_TestBase):

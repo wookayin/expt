@@ -26,8 +26,9 @@ of hypotheses or algorithms applied over different environments or dataset).
 
 import collections
 import itertools
-from typing import Any, Union, Dict, Iterable, Iterator, Callable, Optional
+from typing import Any, Union, Dict, Callable, Optional
 from typing import List, Tuple, Set, Sequence, Mapping, MutableMapping
+from typing import Iterable, Iterator, Generator, TypeVar
 from typeguard import typechecked
 
 import sys
@@ -49,6 +50,8 @@ from . import plot as _plot
 from . import util
 from .path_util import glob, exists, open, isdir
 
+
+T = TypeVar('T')
 
 #########################################################################
 # Data Classes
@@ -169,6 +172,28 @@ class RunList(Sequence[Run]):
         '''Create a new Hypothesis instance containing all the runs
         as the current RunList instance.'''
         return Hypothesis.of(self, name=name)
+
+    def groupby(self,
+                by: Callable[[Run], T], *,
+                name: Callable[[T], str] = str,
+                ) -> Iterator[Tuple[T, 'Hypothesis']]:
+        r'''Group runs into hypotheses with the key function `by` (Run -> key).
+        This will enumerate tuples (`group_key`, Hypothesis) where `group_key`
+        is the result of the key function for each group, and a Hypothesis
+        object (with name `name(group_key)`) will consist of all the runs
+        mapped to the same group.
+
+        Example:
+            key_func = lambda run: re.search("algo=(\w+),lr=([.0-9]+)", run.name).group(1, 2)
+            for group_name, hypothesis in runs.groupby(key_func):
+                ...
+        '''
+        series = pd.Series(self._runs)
+        groupby = series.groupby(lambda i: by(series[i]))
+
+        for group, runs_in_group in groupby:
+            group: T
+            yield group, Hypothesis.of(runs_in_group, name=name(group))
 
 
 @dataclass
