@@ -254,6 +254,10 @@ class Hypothesis(Iterable[Run]):
     def grouped(self) -> DataFrameGroupBy:
         return pd.concat(self._dataframes, sort=False).groupby(level=0)
 
+    def empty(self) -> bool:
+        sentinel = object()
+        return next(iter(self.grouped), sentinel) is sentinel  # O(1)
+
     @property
     def _dataframes(self) -> List[pd.DataFrame]:
         """Get all dataframes associated with all the runs."""
@@ -293,7 +297,7 @@ class Experiment(Iterable[Hypothesis]):
                  title: Optional[str] = None,
                  hypotheses: Iterable[Hypothesis] = None,
                  ):
-        self._title = title or "Experiment"
+        self._title = title if title is not None else ""
         self._hypotheses: MutableMapping[str, Hypothesis] = collections.OrderedDict()
 
         if isinstance(hypotheses, np.ndarray):

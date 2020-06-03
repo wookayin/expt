@@ -320,10 +320,11 @@ class HypothesisPlotter:
         if len(self.runs) == 0:
             raise ValueError("No data to plot, hypothesis.run is empty.")
 
-        grouped = self.grouped
-        if len(grouped) == 0:
+        if self._parent.empty():
             # nothing to draw (no rows)
             raise ValueError("No data to plot, all runs have a empty DataFrame.")
+
+        grouped = self.grouped
 
         if 'x' not in kwargs:
             # index (same across runs) being x value, so we can simply average
@@ -715,7 +716,7 @@ class ExperimentPlotter:
             kwargs['color'] = colors[i]
 
             # exclude the hypothesis if it has no runs in it
-            if not len(hypo.grouped):
+            if hypo.empty():
                 warnings.warn(f"Hypothesis `{hypo.name}` has no data, "
                               "ignoring it", UserWarning)
                 continue
