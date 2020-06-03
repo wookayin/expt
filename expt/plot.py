@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from scipy import interpolate
 
+import matplotlib.ticker
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 
@@ -531,6 +532,11 @@ class HypothesisPlotter:
             for ax in grid.axes_active:
                 ax.grid(which='both', alpha=0.5)
 
+        # after data is available, configure x axis
+        if kwargs.get('xaxis_formatter', True):
+            for ax in grid.axes_active:
+                autoformat_xaxis(ax)
+
         # Add legend by default
         if legend:
             if isinstance(legend, dict):
@@ -743,7 +749,7 @@ class ExperimentPlotter:
         return grid
 
 
-# Protected Utilities
+# Protected Utilities for plotting
 def _add_suptitle(fig, suptitle, fontsize='x-large', y=1.02, **kwargs):
     if suptitle is None:
         raise ValueError("suptitle should not be None")
@@ -755,6 +761,28 @@ def _add_suptitle(fig, suptitle, fontsize='x-large', y=1.02, **kwargs):
         fig.suptitle(**suptitle)
     else:
         raise TypeError("Expected str or dict for suptitle: {}".format(suptitle))
+
+
+FORMATTER_MEGA = matplotlib.ticker.FuncFormatter(
+    lambda x, pos: '{0:g}M'.format(x / 1e6))
+FORMATTER_KILO = matplotlib.ticker.FuncFormatter(
+    lambda x, pos: '{0:g}K'.format(x / 1e3))
+
+
+def autoformat_xaxis(ax: Axes, scale: Optional[float] = None):
+    if scale is None:
+        scale = ax.xaxis.get_data_interval()[1]
+
+    if scale >= 1e6:
+        ticks = FORMATTER_MEGA
+    elif scale >= 1e3:
+        ticks = FORMATTER_KILO
+    else:
+        ticks = None
+
+    if ticks is not None:
+        ax.xaxis.set_major_formatter(ticks)
+    return ticks
 
 
 HypothesisPlotter.__doc__ = HypothesisPlotter.__call__.__doc__
