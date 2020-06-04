@@ -269,7 +269,7 @@ class HypothesisPlotter:
                  rolling=None,
                  ignore_unknown: bool = False,
                  legend: Union[bool, int, str, Dict[str, Any]] = False,
-                 prettify_labels: bool = True,
+                 prettify_labels: bool = False,
                  suptitle: Optional[str] = None,
                  grid: Optional[GridPlot] = None,
                  ax: Optional[Union[Axes, np.ndarray]] = None,
@@ -291,8 +291,9 @@ class HypothesisPlotter:
                 passed as kwargs to GridPlot.add_legend(). Please see the
                 documentation of `GridPlot.add_legend`.
                 If int or str is given, same meaning as `dict(ax=...)`.
-            - prettify_labels (bool): If True (default), apply a sensible
-              default prettifier to the legend labels, truncating long names.
+            - prettify_labels (bool): If True, apply a sensible default
+              prettifier to the legend labels, truncating long names.
+              Default is False.
             - suptitle (str): suptitle for the figure. Defaults to the name
               of the hypothesis. Use empty string("") to disable suptitle.
             - err_style (str): How to show individual runs (traces) or
@@ -650,9 +651,21 @@ class ExperimentPlotter:
     def _columns(self) -> List[str]:
         return self._parent.columns
 
+    DEFAULT_LEGEND_SPEC = dict(loc='upper left', bbox_to_anchor=(1.03, 1))
+
+    def _determine_default_legend_spec(self, labels: List[str]):
+        # Put a legend on the right side of the figure (outside the grid),
+        # or on the first axes if #hypothesis is small enough (<=5)
+        if len(labels) > 5:
+            return self.DEFAULT_LEGEND_SPEC
+        if any(len(l) > 20 for l in labels):
+            return self.DEFAULT_LEGEND_SPEC
+        return dict(ax=0)
+
     def __call__(self, *args,
                  suptitle: Optional[str] = None,
-                 legend: Union[bool, int, str, Dict[str, Any]] = dict(ax=0),
+                 legend: Union[bool, int, str, Dict[str, Any]
+                               ] = DEFAULT_LEGEND_SPEC,
                  grid=None,
                  colors=None, **kwargs) -> GridPlot:
         '''
@@ -673,6 +686,8 @@ class ExperimentPlotter:
                   `dict(ax=None)` means to put legend on the figure itself,
                   `dict(ax='loss')` means to put legend on the subplot axes
                     whose title is `loss`.
+                  `dict(bbox_to_anchor=(0, 1.1), loc='lower left')`:
+                    put a large legend on the figure (e.g., above the title)
               - int: Have a same meaning as dict(ax=...).
               - str: Have a same meaning as dict(ax=...).
             colors: Iterable[Str]
@@ -693,16 +708,20 @@ class ExperimentPlotter:
             from .colors import get_standard_colors
             colors = get_standard_colors(num_colors=len(self._hypotheses))
 
+        hypothesis_labels = [name for name, _ in self._hypotheses.items()]
+        if kwargs.get('prettify_labels', False):
+            hypothesis_labels = util.prettify_labels(hypothesis_labels)
+
+        # Legend (applies a sensible conditional default)
+        if legend == self.DEFAULT_LEGEND_SPEC:
+            legend = self._determine_default_legend_spec(hypothesis_labels)
+
         if not isinstance(legend, bool) and isinstance(legend, (int, str)):
             legend = dict(ax=legend)
         if isinstance(legend, dict):
             kwargs['legend'] = False      # to use aggregated legend
         else:
             kwargs['legend'] = bool(legend)
-
-        hypothesis_labels = [name for name, _ in self._hypotheses.items()]
-        if kwargs.get('prettify_labels', True):
-            hypothesis_labels = util.prettify_labels(hypothesis_labels)
 
         for i, (name, hypo) in enumerate(self._hypotheses.items()):
             if isinstance(y, str):
@@ -716,7 +735,7 @@ class ExperimentPlotter:
                 # display multiple columns over subplots:
                 if y:
                     kwargs['label'] = [f'{y_i} ({name})' for y_i in y]
-                    if kwargs.get('prettify_labels', True):
+                    if kwargs.get('prettify_labels', False):
                         kwargs['label'] = util.prettify_labels(kwargs['label'])
                 kwargs['subplots'] = True
             kwargs['color'] = colors[i]
