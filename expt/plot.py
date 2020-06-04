@@ -273,6 +273,7 @@ class HypothesisPlotter:
                  suptitle: Optional[str] = None,
                  grid: Optional[GridPlot] = None,
                  ax: Optional[Union[Axes, np.ndarray]] = None,
+                 _adjust_figure: bool = True,
                  **kwargs) -> GridPlot:
         '''
         Hypothesis.plot based on matplotlib.
@@ -412,6 +413,7 @@ class HypothesisPlotter:
                              prettify_labels=prettify_labels,
                              suptitle=suptitle,
                              grid=grid, ax=ax,
+                             _adjust_figure=_adjust_figure,
                              args=args, kwargs=kwargs)  # type: ignore
 
     def _validate_ax_with_y(self, ax, y):
@@ -440,6 +442,7 @@ class HypothesisPlotter:
                  suptitle: Optional[str],
                  grid: Optional[GridPlot] = None,
                  ax: Optional[Union[Axes, np.ndarray]] = None,
+                 _adjust_figure: bool = True,
                  args: List,
                  kwargs: Dict,
                  ) -> GridPlot:
@@ -529,7 +532,8 @@ class HypothesisPlotter:
 
         # some sensible styling (grid, tight_layout) AFTER calling plot()
         # Note: 'kwargs[grid]' is for axes and 'grid' means GridPlot
-        if kwargs.get('grid', True):
+        # TODO: Fix the name conflict.
+        if kwargs.get('grid', True):   # this is always true?
             for ax in grid.axes_active:
                 ax.grid(which='both', alpha=0.5)
 
@@ -548,7 +552,8 @@ class HypothesisPlotter:
         if suptitle:
             _add_suptitle(fig, suptitle)
 
-        fig.tight_layout()
+        if _adjust_figure:
+            fig.tight_layout()
         return grid
 
 
@@ -570,6 +575,7 @@ class HypothesisHvPlotter(HypothesisPlotter):
                  suptitle: Optional[str],
                  ax = None,
                  grid = None,
+                 _adjust_figure: bool = True,
                  args: List,
                  kwargs: Dict,
                  ):
@@ -746,9 +752,12 @@ class ExperimentPlotter:
                               "ignoring it", UserWarning)
                 continue
 
+            kwargs['_adjust_figure'] = False
             kwargs['ignore_unknown'] = True
             kwargs['suptitle'] = ''   # no suptitle for each hypo
             grid = hypo.plot(*args, grid=grid, **kwargs)    # on the same ax(es)?
+
+        assert grid is not None
 
         # corner case: if there is only one column, use it as a label
         if len(grid.axes_active) == 1 and isinstance(y, str):
@@ -764,7 +773,10 @@ class ExperimentPlotter:
             suptitle = self._parent.name
         _add_suptitle(grid.figure, suptitle)
 
-        assert grid is not None
+        # adjust figure after all hypotheses have been drawn,
+        # but just only once (see _adjust_figure on HypothesisPlotter)
+        grid.figure.tight_layout()
+
         return grid
 
 
