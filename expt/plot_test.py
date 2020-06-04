@@ -161,6 +161,11 @@ class TestExperimentPlot:
         assert g[1] is g.axes_active[1]
         assert g[-1] is g.axes_active[2]  # we have 3 active axes
 
+    # we can reuse the same test suite,
+    # replacing `hypothesis` with `ex` (backed by self._fixture())
+    # TODO: Use inheritance.
+    testWhenFigAxesAreGiven = TestHypothesisPlot.testWhenFigAxesAreGiven
+
     def testExMultiHypothesisLegend(self):
         ex = self._fixture()
 

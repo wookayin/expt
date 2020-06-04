@@ -417,6 +417,7 @@ class HypothesisPlotter:
                              args=args, kwargs=kwargs)  # type: ignore
 
     def _validate_ax_with_y(self, ax, y):
+        assert not isinstance(y, str)
         if not isinstance(ax, (Axes, np.ndarray)):
             raise TypeError("`ax` must be a single Axes or a ndarray of Axes, "
                             "but given {}".format(ax))
@@ -475,7 +476,7 @@ class HypothesisPlotter:
                     grid = GridPlot(y_names=y,
                                     layout=kwargs.get('layout', None),
                                     figsize=kwargs.get('figsize', None))
-            else:
+            else: # (*)
                 if ax is not None:
                     raise ValueError("Either one of `grid` and `ax` can be given.")
                 self._validate_ax_with_y(grid.axes_active, y)
@@ -488,10 +489,16 @@ class HypothesisPlotter:
             if not kwargs.get('title', None):
                 kwargs['title'] = self.name
 
-            grid = GridPlot(y_names=[kwargs['title']],
-                            layout=(1, 1),
-                            figsize=kwargs.get('figsize', None))
-            ax = grid.axes[0]
+            if grid is None:
+                grid = GridPlot(y_names=[kwargs['title']],
+                                layout=(1, 1), axes=ax,
+                                figsize=kwargs.get('figsize', None))
+            else: # (*)
+                if ax is not None:
+                    raise ValueError("Either one of `grid` and `ax` can be given.")
+                self._validate_ax_with_y(grid.axes_active, y)
+
+            ax = grid.axes_active[0]
 
         if isinstance(ax, np.ndarray) and 'layout' in kwargs:
             # avoid matplotlib warning: when multiple axes are passed,
@@ -755,9 +762,11 @@ class ExperimentPlotter:
             kwargs['_adjust_figure'] = False
             kwargs['ignore_unknown'] = True
             kwargs['suptitle'] = ''   # no suptitle for each hypo
-            grid = hypo.plot(*args, grid=grid, **kwargs)    # on the same ax(es)?
 
-        assert grid is not None
+            grid = hypo.plot(*args, grid=grid, **kwargs)    # on the same ax(es)?
+            assert grid is not None
+
+            kwargs.pop('ax', None)      # From now on, grid.axes will be used
 
         # corner case: if there is only one column, use it as a label
         if len(grid.axes_active) == 1 and isinstance(y, str):
