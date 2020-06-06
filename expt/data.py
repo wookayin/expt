@@ -154,6 +154,13 @@ class RunList(Sequence[Run]):
         """Create a new copy of list containing all the runs."""
         return list(self._runs)
 
+    def to_dataframe(self) -> pd.DataFrame:
+        '''Return a DataFrame consisting of columns "name" and "run".'''
+        return pd.DataFrame({
+            'name': [r.name for r in self._runs],
+            'run': self._runs,
+        })
+
     def filter(self, fn: Union[Callable[[Run], bool], str]) -> 'RunList':
         '''Apply a filter function (Run -> bool) and return the filtered runs
         as another RunList. If a string is given, we convert it as a matcher
@@ -183,6 +190,10 @@ class RunList(Sequence[Run]):
         object (with name `name(group_key)`) will consist of all the runs
         mapped to the same group.
 
+        Args:
+            by: a key function for groupby operation. (Run -> Key)
+            name: a function that maps the group (Key) into Hypothesis name (str).
+
         Example:
             key_func = lambda run: re.search("algo=(\w+),lr=([.0-9]+)", run.name).group(1, 2)
             for group_name, hypothesis in runs.groupby(key_func):
@@ -194,6 +205,21 @@ class RunList(Sequence[Run]):
         for group, runs_in_group in groupby:
             group: T
             yield group, Hypothesis.of(runs_in_group, name=name(group))
+
+    def extract(self, pat: str, flags: int = 0) -> pd.DataFrame:
+        r'''Extract capture groups in the regex pattern `pat` as columns.
+
+        Example:
+            >>> runs[0].name
+            "ppo-halfcheetah-seed0"
+            >>> df = runs.extract(r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
+            >>> assert list(df.columns) == ['algo', 'env_id', 'seed', 'run']
+
+        '''
+        df: pd.DataFrame = self.to_dataframe()
+        df = df['name'].str.extract(pat, flags=flags)
+        df['run'] = list(self._runs)
+        return df
 
 
 @dataclass
@@ -310,6 +336,20 @@ class Experiment(Iterable[Hypothesis]):
             if h.name in self._hypotheses:
                 raise ValueError(f"Duplicate hypothesis name: `{h.name}`")
             self._hypotheses[h.name] = h
+
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame,
+                       by: str, run: str = 'run', *,
+                       title: Optional[str] = None,
+                       ) -> 'Experiment':
+        '''Constructs a new Experiment object from a DataFrame instance
+        structured as per the convention.'''
+        ex = Experiment(title=title)
+        for hypothesis_name, runs_df in df.groupby(by):
+            runs = RunList(runs_df[run])
+            h = runs.to_hypothesis(name=hypothesis_name)
+            ex.add_hypothesis(h)
+        return ex
 
     def add_runs(self,
                  hypothesis_name: str,

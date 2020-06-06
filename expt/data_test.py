@@ -1,3 +1,4 @@
+import itertools
 import os
 import subprocess
 import sys
@@ -27,6 +28,17 @@ def V(x):
 class _TestBase:
     def setup_method(self, method):
         sys.stdout.write("\n")
+
+
+@pytest.fixture
+def runs_gridsearch() -> RunList:
+    runs = []
+    ALGO, ENV_ID = ["ppo", "sac"], ["halfcheetah", "hopper", "humanoid"]
+    for (algo, env_id) in itertools.product(ALGO, ENV_ID):
+        for seed in [0, 1]:
+            df = pd.DataFrame({"reward" : np.arange(100)})
+            runs.append(Run(f"{algo}-{env_id}-seed{seed}", df))
+    return RunList(runs)
 
 
 class TestRunList(_TestBase):
@@ -114,6 +126,16 @@ class TestRunList(_TestBase):
         assert isinstance(groups[0], Hypothesis)
         assert groups[0].runs.map(lambda run: run.name) == ["r0", "r5", "r10", "r15"]
 
+    def testRunListExtract(self, runs_gridsearch):
+        print(runs_gridsearch)
+        df = runs_gridsearch.extract(
+            r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
+        print(df)
+        assert set(df.columns) == set(['algo', 'env_id', 'seed', 'run'])
+        assert list(df['algo'].unique()) == ["ppo", "sac"]
+        assert list(df['env_id'].unique()) == ["halfcheetah", "hopper", "humanoid"]
+        assert list(df['seed'].unique()) == ['0', '1']
+
 
 class TestHypothesis(_TestBase):
 
@@ -149,6 +171,18 @@ class TestHypothesis(_TestBase):
 
 
 class TestExperiment(_TestBase):
+
+    def testFromDataFrame(self, runs_gridsearch):
+        # reuse the fixture data from testRunListExtract
+        df = runs_gridsearch.extract(
+            r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
+
+        # implicit groupby via from_dataframe
+        ex = Experiment.from_dataframe(df, by="algo", title="foobar")
+        assert len(ex.hypotheses) == 2
+        assert list(V(ex["ppo"].runs)) == [r for r in runs_gridsearch if "ppo" in r.name]
+        assert list(V(ex["sac"].runs)) == [r for r in runs_gridsearch if "sac" in r.name]
+        assert ex.title == "foobar"
 
     def testExperimentIndexing(self):
         h0 = Hypothesis("hyp0", Run('r0', pd.DataFrame({"a": [1, 2, 3]})))
