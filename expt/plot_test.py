@@ -6,7 +6,9 @@ import sys
 import numpy as np
 import pandas as pd
 import pytest
+import matplotlib.pyplot as plt
 
+import expt.plot
 import expt.data
 from expt.data import Experiment, Hypothesis, Run, RunList
 
@@ -62,7 +64,6 @@ class TestHypothesisPlot:
 
     def testWhenFigAxesAreGiven(self):
         hypothesis = self._fixture()
-        import matplotlib.pyplot as plt
 
         # single y given a single axesplot
         fig, ax = plt.subplots()
@@ -90,6 +91,26 @@ class TestHypothesisPlot:
         assert g.axes.shape == (2, 1)
         assert g.axes_active[0] is axes.flat[0]
         assert g.axes_active[1] is axes.flat[1]
+
+    def testSuptitle(self):
+        hypothesis = self._fixture()
+
+        # when given, it should be set
+        g = hypothesis.plot(suptitle="super!")
+        assert g.fig._suptitle.get_text() == "super!"
+
+        # default behavior: hypothesis name?
+        g = hypothesis.plot()
+        assert g.fig._suptitle.get_text() == hypothesis.name
+
+        # default behavior: if ax or grid is given, do not set suptitle
+        fig, ax = plt.subplots()
+        g = hypothesis.plot(ax=ax, y='loss')
+        assert g.fig._suptitle is None or g.fig._suptitle.get_text() == ""
+
+        g = expt.plot.GridPlot(y_names=['loss'])
+        g = hypothesis.plot(grid=g, y='loss')
+        assert g.fig._suptitle is None or g.fig._suptitle.get_text() == ""
 
     def testSingleHypothesisLegend(self):
         hypothesis = self._fixture()
@@ -165,6 +186,7 @@ class TestExperimentPlot:
     # replacing `hypothesis` with `ex` (backed by self._fixture())
     # TODO: Use inheritance.
     testWhenFigAxesAreGiven = TestHypothesisPlot.testWhenFigAxesAreGiven
+    testSuptitle = TestHypothesisPlot.testSuptitle
 
     def testExMultiHypothesisLegend(self):
         ex = self._fixture()

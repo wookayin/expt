@@ -403,7 +403,8 @@ class HypothesisPlotter:
             mean = mean.rolling(rolling, min_periods=1, center=True).mean()
             std = std.rolling(rolling, min_periods=1, center=True).mean()
 
-        if suptitle is None:
+        # suptitle: defaults to hypothesis name if ax/grid was not given
+        if suptitle is None and (ax is None and grid is None):
             suptitle = self._parent.name
 
         return self._do_plot(y, mean, std, n_samples=n_samples,
@@ -560,7 +561,7 @@ class HypothesisPlotter:
 
         # add figure title
         fig = grid.figure
-        if suptitle:
+        if suptitle is not None:
             _add_suptitle(fig, suptitle)
 
         if _adjust_figure:
@@ -755,6 +756,8 @@ class ExperimentPlotter:
         else:
             kwargs['legend'] = bool(legend)
 
+        given_ax_or_grid = ('ax' in kwargs) or (grid is not None)
+
         for i, (name, hypo) in enumerate(self._hypotheses.items()):
             if isinstance(y, str):
                 # display different hypothesis over subplots:
@@ -798,8 +801,10 @@ class ExperimentPlotter:
 
         # title, etc.
         if suptitle is None:
-            suptitle = self._parent.name
-        _add_suptitle(grid.figure, suptitle)
+            ex = self._parent
+            suptitle = ex.name
+        if not given_ax_or_grid:   # do not add suptitle if ax or grid were given
+            _add_suptitle(grid.figure, suptitle)
 
         # adjust figure after all hypotheses have been drawn,
         # but just only once (see _adjust_figure on HypothesisPlotter)
