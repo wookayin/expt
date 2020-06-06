@@ -89,7 +89,6 @@ class GridPlot:
             ax.set_title(yi)
         for yi, ax in zip(self._y_names, self.axes_inactive):
             ax.axis('off')
-        fig.tight_layout()
 
         if len(self._axes.flat) < len(y_names):
             raise ValueError(
@@ -291,7 +290,7 @@ class HypothesisPlotter:
                  suptitle: Optional[str] = None,
                  grid: Optional[GridPlot] = None,
                  ax: Optional[Union[Axes, np.ndarray]] = None,
-                 _adjust_figure: bool = True,
+                 tight_layout: bool = True,
                  **kwargs) -> GridPlot:
         '''
         Hypothesis.plot based on matplotlib.
@@ -432,7 +431,7 @@ class HypothesisPlotter:
                              prettify_labels=prettify_labels,
                              suptitle=suptitle,
                              grid=grid, ax=ax,
-                             _adjust_figure=_adjust_figure,
+                             tight_layout=tight_layout,
                              args=args, kwargs=kwargs)  # type: ignore
 
     def _validate_ax_with_y(self, ax, y):
@@ -462,7 +461,7 @@ class HypothesisPlotter:
                  suptitle: Optional[str],
                  grid: Optional[GridPlot] = None,
                  ax: Optional[Union[Axes, np.ndarray]] = None,
-                 _adjust_figure: bool = True,
+                 tight_layout: Union[bool, Dict[str, Any]] = True,
                  args: List,
                  kwargs: Dict,
                  ) -> GridPlot:
@@ -581,8 +580,9 @@ class HypothesisPlotter:
         if suptitle is not None:
             _add_suptitle(fig, suptitle)
 
-        if _adjust_figure:
-            fig.tight_layout()
+        if tight_layout:
+            tight_layout = {} if isinstance(tight_layout, bool) else tight_layout
+            fig.tight_layout(**tight_layout)
         return grid
 
 
@@ -604,7 +604,7 @@ class HypothesisHvPlotter(HypothesisPlotter):
                  suptitle: Optional[str],
                  ax = None,
                  grid = None,
-                 _adjust_figure: bool = True,
+                 tight_layout: bool = True,
                  args: List,
                  kwargs: Dict,
                  ):
@@ -717,7 +717,9 @@ class ExperimentPlotter:
                  legend: Union[bool, int, str, Dict[str, Any]
                                ] = DEFAULT_LEGEND_SPEC,
                  grid=None,
-                 colors=None, **kwargs) -> GridPlot:
+                 colors=None,
+                 tight_layout: Union[bool, Dict[str, Any]] = True,
+                 **kwargs) -> GridPlot:
         '''
         Experiment.plot.
 
@@ -798,7 +800,7 @@ class ExperimentPlotter:
                               "ignoring it", UserWarning)
                 continue
 
-            kwargs['_adjust_figure'] = False
+            kwargs['tight_layout'] = False
             kwargs['ignore_unknown'] = True
             kwargs['suptitle'] = ''   # no suptitle for each hypo
 
@@ -824,8 +826,10 @@ class ExperimentPlotter:
             _add_suptitle(grid.figure, suptitle)
 
         # adjust figure after all hypotheses have been drawn,
-        # but just only once (see _adjust_figure on HypothesisPlotter)
-        grid.figure.tight_layout()
+        # but just only once (see tight_layout on HypothesisPlotter)
+        if tight_layout:
+            tight_layout = {} if isinstance(tight_layout, bool) else tight_layout
+            grid.figure.tight_layout(**tight_layout)
 
         return grid
 
