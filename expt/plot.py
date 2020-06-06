@@ -85,6 +85,12 @@ class GridPlot:
         self._fig: Figure = fig
         self._axes: np.ndarray = axes
 
+        for yi, ax in zip(self._y_names, self.axes_active):
+            ax.set_title(yi)
+        for yi, ax in zip(self._y_names, self.axes_inactive):
+            ax.axis('off')
+        fig.tight_layout()
+
         if len(self._axes.flat) < len(y_names):
             raise ValueError(
                 "Grid size is %d * %d = %d, smaller than len(y) = %d" % (
@@ -112,6 +118,12 @@ class GridPlot:
         """Return a flattened ndarray of active subplots (excluding that are
         turned off), whose length equals `self.n_plots`."""
         return self.axes.flat[:self.n_plots]
+
+    @property
+    def axes_inactive(self) -> np.ndarray:
+        """Return a flattened ndarray of inactive subplots, whose length
+        equals `prod(self.axes.shape) - self.n_plots`."""
+        return self.axes.flat[self.n_plots:]
 
     def __getitem__(self, key) -> Union[Axes, np.ndarray]:
         # Note: see add_legend(ax) as well
@@ -146,7 +158,12 @@ class GridPlot:
         self.fig.savefig(*args, **kwargs)
 
     def clear_legends(self):
+        """Clear all legends on the figure itself and all the subplot axes."""
         self.fig.legends[:] = []
+        for ax in self.axes.flat:
+            legend = ax.get_legend()
+            if legend:
+                legend.remove()
         return self
 
     def add_legend(self,
