@@ -3,6 +3,7 @@ Plotting behavior (matplotlib, hvplot, etc.) for expt.data
 """
 
 import difflib
+import itertools
 import warnings
 from typing import Union, Iterable, Iterator, Optional
 from typing import Tuple, List, Dict, Any
@@ -575,8 +576,8 @@ class HypothesisHvPlotter(HypothesisPlotter):
                  subplots: bool,
                  rolling: Optional[int],
                  err_style: Optional[str],
-                 std_alpha: Optional[float],
-                 runs_alpha: Optional[float],
+                 std_alpha: float,
+                 runs_alpha: float,
                  legend: Union[bool, int, str, Dict[str, Any]],
                  prettify_labels: bool = False,
                  suptitle: Optional[str],
@@ -598,13 +599,26 @@ class HypothesisHvPlotter(HypothesisPlotter):
                             **kwargs)
 
             # Display a single legend without duplication
-            if isinstance(p.data, dict):
-                next(iter(p.data.values())).opts('Curve', show_legend=True)
+            if legend and isinstance(p.data, dict):
+                if isinstance(legend, bool):
+                    for overlay in p.data.values():
+                        overlay.opts('Curve', show_legend=legend)
+                elif isinstance(legend, int):
+                    for overlay in itertools.islice(p.data.values(), legend, legend + 1):
+                        overlay.opts('Curve', show_legend=True)
+                elif isinstance(legend, str):
+                    for k in p.data.keys():
+                        yi = k if isinstance(k, str) else k[0]
+                        if yi == legend:
+                            p[yi].opts('Curve', show_legend=True)
+                else:
+                    raise TypeError("Unsupported type for legend : {}".format(type(legend)))
+
         else:
             # TODO implement this version
             raise NotImplementedError
 
-        if std_alpha is not None:
+        if err_style in ('band', 'fill') and std_alpha:
             band_lower = mean - std
             band_lower['_facet'] = 'lower'
             band_upper = mean + std
@@ -626,7 +640,7 @@ class HypothesisHvPlotter(HypothesisPlotter):
                 )
 
             if isinstance(p.data, pd.DataFrame):
-                # single plot rather than multiple subplots:sp
+                # single plot rather than multiple subplots
                 p = p * _overlay_area(y[0])
 
             else:
@@ -648,6 +662,8 @@ class HypothesisHvPlotter(HypothesisPlotter):
                     p.data[k] = p.data[k] * area_fill   # overlay 1-std err range
 
         # TODO: runs_alpha and rolling
+
+        p = p.opts(shared_axes=False)
         return p
 
 
