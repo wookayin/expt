@@ -461,12 +461,6 @@ class HypothesisPlotter:
             # Prepare kwargs for DataFrame.plot() call
             kwargs.update(dict(y=y, title=title,
                                color=color, label=label))
-            if not isinstance(legend, bool) and isinstance(legend, (int, str)):
-                legend = dict(ax=legend)
-            if isinstance(legend, dict):
-                kwargs['legend'] = False      # to use aggregated legend
-            else:
-                kwargs['legend'] = bool(legend)
 
             if grid is None:
                 if ax is not None:
@@ -505,6 +499,15 @@ class HypothesisPlotter:
             # avoid matplotlib warning: when multiple axes are passed,
             # layout are ignored.
             del kwargs['layout']
+
+        # Legend
+        if not isinstance(legend, bool) and isinstance(legend, (int, str)):
+            legend = dict(ax=legend)
+        if isinstance(legend, dict):
+            kwargs['legend'] = False      # to use aggregated legend
+        else:
+            kwargs['legend'] = bool(legend)
+
         axes = mean.plot(*args, subplots=subplots, ax=ax, **kwargs)
 
         if err_style not in self.KNOWN_ERR_STYLES:

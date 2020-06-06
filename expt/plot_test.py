@@ -195,3 +195,12 @@ class TestExperimentPlot:
         for ax in g.axes_active: assert ax.get_legend() is None
         # Do we have labels for all of 2 hypotheses?
         assert len(g.figure.legends[0].texts) == len(ex.hypotheses)
+
+        # For single y ...
+        g = ex.plot(y="a", legend=False)
+        assert g.figure.legends == []
+        for ax in g.axes_active: assert ax.get_legend() is None
+        # subplots=False cases
+        g = ex.plot(y=["a", "b0"], subplots=False, legend=False)
+        assert g.figure.legends == []
+        for ax in g.axes_active: assert ax.get_legend() is None
