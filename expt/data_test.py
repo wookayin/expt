@@ -150,12 +150,12 @@ class TestHypothesis(_TestBase):
         r0 = Run("r0", pd.DataFrame({"y": [1, 2, 3]}))
         h = Hypothesis.of([r0])
         print(h)
-        assert h.runs.as_list() == [r0]
+        assert h.runs.to_list() == [r0]
 
         h = Hypothesis.of(r0)
         print(h)
         assert h.name == 'r0'
-        assert h.runs.as_list() == [r0]
+        assert h.runs.to_list() == [r0]
 
         def generator():
             for i in ["a", "b", "c"]:

@@ -9,6 +9,6 @@ from . import (data, plot, colors)
 
 # populate common APIs
 from .data import (
-    Experiment, Hypothesis, Run,
+    Experiment, Hypothesis, Run, RunList,
     parse_run, get_runs,
 )

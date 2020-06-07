@@ -94,15 +94,15 @@ class Run:
         path = self.path.rstrip('/')
         return os.path.basename(path)
 
-    def as_hypothesis(self):
-        '''Contains a Hypothesis consisting of this run only.'''
+    def to_hypothesis(self) -> 'Hypothesis':
+        '''Create a new `Hypothesis` consisting of only this run.'''
         return Hypothesis.of(self)
 
     def plot(self, *args, subplots=True, **kwargs):
-        return self.as_hypothesis().plot(*args, subplots=subplots, **kwargs)
+        return self.to_hypothesis().plot(*args, subplots=subplots, **kwargs)
 
     def hvplot(self, *args, subplots=True, **kwargs):
-        return self.as_hypothesis().hvplot(*args, subplots=subplots, **kwargs)
+        return self.to_hypothesis().hvplot(*args, subplots=subplots, **kwargs)
 
 
 class RunList(Sequence[Run]):
@@ -150,7 +150,7 @@ class RunList(Sequence[Run]):
     def extend(self, more_runs: Iterable[Run]):
         self._runs.extend(more_runs)
 
-    def as_list(self):
+    def to_list(self) -> List[Run]:
         """Create a new copy of list containing all the runs."""
         return list(self._runs)
 
