@@ -20,6 +20,10 @@ from . import util
 from . import data
 
 
+warnings.filterwarnings("ignore", category=UserWarning,
+                        message='Creating legend with loc="best"')
+
+
 class GridPlot:
     """Multi-plot grid subplots.
 
