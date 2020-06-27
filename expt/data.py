@@ -202,8 +202,8 @@ class RunList(Sequence[Run]):
         series = pd.Series(self._runs)
         groupby = series.groupby(lambda i: by(series[i]))
 
+        group: T
         for group, runs_in_group in groupby:
-            group: T
             yield group, Hypothesis.of(runs_in_group, name=name(group))
 
     def extract(self, pat: str, flags: int = 0) -> pd.DataFrame:
@@ -320,10 +320,10 @@ class Experiment(Iterable[Hypothesis]):
 
     @typechecked
     def __init__(self,
-                 title: Optional[str] = None,
+                 name: Optional[str] = None,
                  hypotheses: Iterable[Hypothesis] = None,
                  ):
-        self._title = title if title is not None else ""
+        self._name = name if name is not None else ""
         self._hypotheses: MutableMapping[str, Hypothesis] = collections.OrderedDict()
 
         if isinstance(hypotheses, np.ndarray):
@@ -340,11 +340,11 @@ class Experiment(Iterable[Hypothesis]):
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame,
                        by: str, run: str = 'run', *,
-                       title: Optional[str] = None,
+                       name: Optional[str] = None,
                        ) -> 'Experiment':
         '''Constructs a new Experiment object from a DataFrame instance
         structured as per the convention.'''
-        ex = Experiment(title=title)
+        ex = Experiment(name=name)
         for hypothesis_name, runs_df in df.groupby(by):
             runs = RunList(runs_df[run])
             h = runs.to_hypothesis(name=hypothesis_name)
@@ -390,11 +390,11 @@ class Experiment(Iterable[Hypothesis]):
 
     @property
     def name(self) -> str:
-        return self._title
+        return self._name
 
     @property
     def title(self) -> str:
-        return self._title
+        return self._name
 
     def keys(self) -> Iterable[str]:
         """Return all hypothesis names."""
@@ -483,7 +483,7 @@ class Experiment(Iterable[Hypothesis]):
             self._hypotheses[name] = hypothesis_or_runs
         else:
             # TODO metadata (e.g. color)
-            self.add_runs(name, hypothesis_or_runs)
+            self.add_runs(name, hypothesis_or_runs)   # type: ignore
 
         return self._hypotheses[name]
 

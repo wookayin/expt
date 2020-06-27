@@ -178,17 +178,17 @@ class TestExperiment(_TestBase):
             r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
 
         # implicit groupby via from_dataframe
-        ex = Experiment.from_dataframe(df, by="algo", title="foobar")
+        ex = Experiment.from_dataframe(df, by="algo", name="foobar")
         assert len(ex.hypotheses) == 2
         assert list(V(ex["ppo"].runs)) == [r for r in runs_gridsearch if "ppo" in r.name]
         assert list(V(ex["sac"].runs)) == [r for r in runs_gridsearch if "sac" in r.name]
-        assert ex.title == "foobar"
+        assert ex.name == "foobar"
 
     def testExperimentIndexing(self):
         h0 = Hypothesis("hyp0", Run('r0', pd.DataFrame({"a": [1, 2, 3]})))
         h1 = Hypothesis("hyp1", Run('r1', pd.DataFrame({"a": [4, 5, 6]})))
 
-        ex = Experiment(title="ex", hypotheses=[h0, h1])
+        ex = Experiment(name="ex", hypotheses=[h0, h1])
 
         # get hypothesis by name or index
         assert V(ex[0]) == h0

@@ -152,7 +152,7 @@ class TestExperimentPlot:
             {"a": [1, 2, 3], "b0": [10, 9, 8]})))
         h1 = Hypothesis("hyp1", Run('r1', pd.DataFrame(
             {"a": [4, 5, 6], "b1": [7, 6, 5]})))
-        ex = Experiment(title="ex", hypotheses=[h0, h1])
+        ex = Experiment(name="ex", hypotheses=[h0, h1])
         return ex
 
     def testGridPlotBasic(self):   # TODO: Add more complex scenario.
