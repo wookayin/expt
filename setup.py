@@ -92,7 +92,7 @@ setup(
     name='expt',
     version=__version__,
     license='MIT',
-    description='EXperiment. Plot. Table.',
+    description='EXperiment. Plot. Tabulate.',
     long_description=read_readme(),
     long_description_content_type='text/markdown',
     url='https://github.com/wookayin/expt',
