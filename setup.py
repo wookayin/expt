@@ -77,14 +77,15 @@ install_requires = [
     'numpy',
     'scipy',
     'dataclasses>=0.6',
-    'typeguard>=2.6.1'
+    'typeguard>=2.6.1',
     'matplotlib>=3.0.0',
-    'pandas>=0.22.0',
+    'pandas>=1.0',
 ]
 
 tests_requires = [
     'mock>=2.0.0',
-    'pytest<5.0',
+    'pytest>=5.0',   # Python 3.5+
+    'pytest-cov',
 ]
 
 setup(
