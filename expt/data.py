@@ -401,7 +401,7 @@ class Experiment(Iterable[Hypothesis]):
         return self._hypotheses.keys()
 
     @property
-    def hypotheses(self) -> Iterable[Hypothesis]:
+    def hypotheses(self) -> Sequence[Hypothesis]:
         return tuple(self._hypotheses.values())
 
     def select_top(self, criteria) -> Hypothesis:
@@ -422,7 +422,7 @@ class Experiment(Iterable[Hypothesis]):
     def __repr__(self) -> str:
         return (
             f"Experiment('{self.name}', {len(self._hypotheses)} hypotheses: [ \n " +
-            '\n '.join([repr(exp) for exp in self._hypotheses]) +
+            '\n '.join([repr(exp) for exp in self.hypotheses]) +
             "\n])"
         )
 
