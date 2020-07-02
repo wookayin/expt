@@ -32,6 +32,9 @@ class TestHypothesisPlot:
     def setup_method(self, method):
         sys.stdout.write("\n")
 
+    def teardown_method(self, method):
+        plt.close("all")
+
     @staticmethod
     def _fixture() -> Hypothesis:
         data = dict()
