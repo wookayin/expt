@@ -2,6 +2,7 @@ import itertools
 import os
 import subprocess
 import sys
+import re
 import tempfile
 
 import numpy as np
@@ -126,7 +127,7 @@ class TestRunList(_TestBase):
         assert isinstance(groups[0], Hypothesis)
         assert groups[0].runs.map(lambda run: run.name) == ["r0", "r5", "r10", "r15"]
 
-    def testRunListExtract(self, runs_gridsearch):
+    def testRunListExtract(self, runs_gridsearch: RunList):
         print(runs_gridsearch)
         df = runs_gridsearch.extract(
             r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
@@ -172,17 +173,51 @@ class TestHypothesis(_TestBase):
 
 class TestExperiment(_TestBase):
 
-    def testFromDataFrame(self, runs_gridsearch):
-        # reuse the fixture data from testRunListExtract
+    def testFromDataFrameDefault(self, runs_gridsearch: RunList):
+        """Tests Experiment.from_dataframe with the minimal defaults."""
+        df = runs_gridsearch.to_dataframe()
+        ex = Experiment.from_dataframe(df)
+        # Each run becomes an individual hypothesis.
+        assert len(ex.hypotheses) == 12
+
+    def testFromDataFrameMulticolumns(self, runs_gridsearch: RunList):
+        """Tests Experiment.from_dataframe where the dataframe consists of
+        multiple columns (usually parsed via RunList.extract)."""
+        # Reuse the fixture data from testRunListExtract.
         df = runs_gridsearch.extract(
             r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
+        assert set(df.columns) == set(["algo", "env_id", "seed", "run"])
+
+        # If `by` is missing, cannot be automatically determined.
+        with pytest.raises(ValueError, match=re.escape(
+            "Candidates: ['algo', 'env_id', 'seed']")):
+            Experiment.from_dataframe(df)
 
         # implicit groupby via from_dataframe
-        ex = Experiment.from_dataframe(df, by="algo", name="foobar")
+        ex = Experiment.from_dataframe(df, by="algo", name="Exp.foobar")
         assert len(ex.hypotheses) == 2
         assert list(V(ex["ppo"].runs)) == [r for r in runs_gridsearch if "ppo" in r.name]
         assert list(V(ex["sac"].runs)) == [r for r in runs_gridsearch if "sac" in r.name]
-        assert ex.name == "foobar"
+        assert ex.name == "Exp.foobar"
+
+    def testFromDataFrameGeneral(self, runs_gridsearch: RunList):
+        """Organize a RunList into Hypothesis grouped by (algorithm, env),
+        i.e. only averaging over random seed."""
+        df = runs_gridsearch.extract(
+            r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
+
+        # Default: group by ['algo', 'env_id']
+        ex = V(Experiment.from_dataframe(df, by=["algo", "env_id"], name="A"))
+        assert len(ex.hypotheses) == 6
+        assert isinstance(ex.hypotheses[0].name, str)
+        assert ex.hypotheses[0].name == repr(('ppo', 'halfcheetah'))
+
+        # Group by ['env_id', 'algo'] and use a custom namer
+        namer = lambda t: f"{t[0]}-{t[1]}"
+        ex = V(Experiment.from_dataframe(df, by=["env_id", "algo"],
+                                         hypothesis_namer=namer, name="B"))
+        assert ex.hypotheses[0].name == 'halfcheetah-ppo'
+        assert len(ex.hypotheses) == 6
 
     def testExperimentIndexing(self):
         h0 = Hypothesis("hyp0", Run('r0', pd.DataFrame({"a": [1, 2, 3]})))

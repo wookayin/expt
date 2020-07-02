@@ -339,14 +339,38 @@ class Experiment(Iterable[Hypothesis]):
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame,
-                       by: str, run: str = 'run', *,
+                       by: Optional[Union[str, List[str]]] = None,
+                       *,
+                       run_column: str = 'run',
+                       hypothesis_namer: Callable[..., str] = str,
                        name: Optional[str] = None,
                        ) -> 'Experiment':
         '''Constructs a new Experiment object from a DataFrame instance
-        structured as per the convention.'''
+        structured as per the convention.
+
+        Args:
+          by (str, List[str]): The column name to group by. If None (default),
+            it will try to automatically determine from the dataframe if there
+            is only one column other than `run_column`.
+          run_column (str): The column name that contains `Run` objects.
+            See also `RunList.to_dataframe()`.
+          hypothesis_namer: This is a mapping that transforms the group key
+            (a str or tuple) that pandas groupby produces into hypothesis name.
+            This function should take one positional argument for the group key.
+          name: The name for the produced `Experiment`.
+        '''
+        if by is None:
+            # Automatically determine the column from df.
+            by_columns = list(sorted(set(df.columns).difference([run_column])))
+            if len(by_columns) != 1:
+                raise ValueError("Cannot automatically determine the column to "
+                                 "group by. Candidates: {}".format(by_columns))
+            by = next(iter(by_columns))
+
         ex = Experiment(name=name)
-        for hypothesis_name, runs_df in df.groupby(by):
-            runs = RunList(runs_df[run])
+        for hypothesis_key, runs_df in df.groupby(by):
+            hypothesis_name = hypothesis_namer(hypothesis_key)
+            runs = RunList(runs_df[run_column])
             h = runs.to_hypothesis(name=hypothesis_name)
             ex.add_hypothesis(h)
         return ex
