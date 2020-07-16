@@ -24,6 +24,7 @@ Note that one can also manage a collection of Experiments (e.g. the same set
 of hypotheses or algorithms applied over different environments or dataset).
 """
 
+import re
 import collections
 import itertools
 from typing import Any, Union, Dict, Callable, Optional
@@ -164,11 +165,18 @@ class RunList(Sequence[Run]):
     def filter(self, fn: Union[Callable[[Run], bool], str]) -> 'RunList':
         '''Apply a filter function (Run -> bool) and return the filtered runs
         as another RunList. If a string is given, we convert it as a matcher
-        function (see fnmatch) that matches run.name'''
+        function (see fnmatch) that matches `run.name`.'''
         if isinstance(fn, str):
             pat = str(fn)
             fn = lambda run: fnmatch.fnmatch(run.name, pat)
         return RunList(filter(fn, self._runs))
+
+    def grep(self, regex: Union[str, 're.Pattern'], flags=0):
+        '''Apply a regex-based filter on the path of `Run`, and return the
+        matched `Run`s as a RunList.'''
+        if isinstance(regex, str):
+            regex = re.compile(regex, flags=flags)
+        return self.filter(lambda r: bool(regex.match(r.path)))
 
     def map(self, func: Callable[[Run], Any]) -> List:
         '''Apply func for each of the runs. Return the transformation

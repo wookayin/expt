@@ -103,6 +103,13 @@ class TestRunList(_TestBase):
         filtered = V(runs.filter("r1*"))  # 1, 10-15
         assert len(filtered) == 7
 
+    def testRunListGrep(self):
+        runs = self._fixture()
+        assert len(runs.grep("r1")) == 7
+        assert len(runs.grep("r[369]")) == 3
+        assert len(runs.grep(re.compile(".*13$"))) == 1
+        assert len(runs.grep("R", flags=re.IGNORECASE)) == 16
+
     def testRunListMap(self):
         runs = self._fixture()
         t = V(runs.map(lambda run: run.name))
