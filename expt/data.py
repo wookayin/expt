@@ -176,7 +176,7 @@ class RunList(Sequence[Run]):
         matched `Run`s as a RunList.'''
         if isinstance(regex, str):
             regex = re.compile(regex, flags=flags)
-        return self.filter(lambda r: bool(regex.match(r.path)))
+        return self.filter(lambda r: bool(regex.search(r.path)))
 
     def map(self, func: Callable[[Run], Any]) -> List:
         '''Apply func for each of the runs. Return the transformation

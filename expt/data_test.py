@@ -105,8 +105,10 @@ class TestRunList(_TestBase):
 
     def testRunListGrep(self):
         runs = self._fixture()
-        assert len(runs.grep("r1")) == 7
+        assert len(runs.grep("1")) == 7
+        assert len(runs.grep("^1$")) == 0
         assert len(runs.grep("r[369]")) == 3
+        assert list(runs.grep("0")) == [runs[0], runs[10]]
         assert len(runs.grep(re.compile(".*13$"))) == 1
         assert len(runs.grep("R", flags=re.IGNORECASE)) == 16
 
