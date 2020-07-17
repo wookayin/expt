@@ -74,7 +74,12 @@ def glob(pattern):
         pattern = pattern.rstrip('/')
         if IS_GSUTIL_AVAILABLE:
             try:
-                return gsutil('ls', '-d', pattern)
+                if pattern.endswith('/*'):
+                    # A small optimization: 'gsutil ls foo/' is much faster
+                    # than 'gsutil ls -d foo/*' (around 3x~5x)
+                    return gsutil('ls', pattern.rstrip('*'))
+                else:
+                    return gsutil('ls', '-d', pattern)
             except GsCommandException as e:
                 if GSUTIL_NO_MATCHES in str(e):
                     return []
