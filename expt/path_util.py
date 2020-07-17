@@ -39,6 +39,15 @@ def gsutil(*args) -> List[str]:
     # TODO: Handle 401 exceptions.
     cmd = ['gsutil'] + list(args)
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    lines = []
+    for line in p.stdout:
+        line = line.rstrip()
+        if not isinstance(line, str):
+            line = line.decode('utf-8')
+        if line:
+            lines.append(line)
+
     retcode = p.wait()
     if retcode != 0:
         stderr = p.stderr.read().decode('utf8')  # type: ignore
@@ -49,7 +58,7 @@ def gsutil(*args) -> List[str]:
         sys.stderr.flush()
         raise subprocess.CalledProcessError(
             retcode, cmd=' '.join(shlex.quote(s) for s in cmd))
-    return p.stdout.read().decode('utf8').rstrip('\n').split('\n')  # type: ignore
+    return lines
 
 
 def glob(pattern):
