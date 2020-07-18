@@ -13,6 +13,9 @@ from typing import List
 from distutils.spawn import find_executable
 
 
+# Options for gsutil. By default, gsutil is disabled as tf.io.gfile is
+# **much** faster than gsutil commands (for globbing and listing).
+USE_GSUTIL = False
 IS_GSUTIL_AVAILABLE = find_executable("gsutil")
 GSUTIL_NO_MATCHES = 'One or more URLs matched no objects'
 
@@ -61,6 +64,17 @@ def gsutil(*args) -> List[str]:
     return lines
 
 
+def use_gsutil(value: bool):
+    """Configure path_util to use gsutil."""
+    global USE_GSUTIL
+    if value:
+        if not IS_GSUTIL_AVAILABLE:
+            raise RuntimeError("gsutil is not available.")
+        USE_GSUTIL = True
+    else:
+        USE_GSUTIL = False
+
+
 def glob(pattern):
     """
     A glob function, returning a list of paths matching a pathname pattern.
@@ -72,7 +86,7 @@ def glob(pattern):
         # Bug: GCP glob does not match any directory on trailing slashes.
         # https://github.com/GoogleCloudPlatform/gsutil/issues/444
         pattern = pattern.rstrip('/')
-        if IS_GSUTIL_AVAILABLE:
+        if USE_GSUTIL:
             try:
                 if pattern.endswith('/*'):
                     # A small optimization: 'gsutil ls foo/' is much faster
@@ -97,7 +111,7 @@ def exists(path) -> bool:
     remote path (Google Cloud Storage, gs://...) via gfile.exists(...).
     """
     if path.startswith('gs://'):
-        if IS_GSUTIL_AVAILABLE:
+        if USE_GSUTIL:
             try:
                 return bool(gsutil('ls', '-d', path))
             except GsCommandException as e:
