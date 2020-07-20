@@ -13,9 +13,9 @@ del sys
 del _thismodule
 
 
-# sensible default color sets
+# Sensible default color sets that are more distinguishable: 17 colors
 # https://matplotlib.org/3.1.0/gallery/color/named_colors.html
-default_colors = [
+DefaultColors = (
     'dimgray',
     'dodgerblue',
     'limegreen',
@@ -25,15 +25,15 @@ default_colors = [
     'brown',
     'red',
     'purple',
-    'cadetblue',
-    'royalblue',
-    'yellowgreen',
     'green',
-    'lightseagreen',
+    'cadetblue',
     'burlywood',
-    'sandybrown',
+    'royalblue',
     'violet',
-]
+    'lightseagreen',
+    'yellowgreen',
+    'sandybrown',
+)
 
 
 try:

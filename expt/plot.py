@@ -759,10 +759,30 @@ class ExperimentPlotter:
                 y = [yi for yi in y if yi != kwargs['x']]
             kwargs['y'] = y
 
-        if colors is None:
-            # len(colors) should equal hypothesis. or have as attributes
-            from .colors import get_standard_colors
-            colors = get_standard_colors(num_colors=len(self._hypotheses))
+        # Line style for each hypothesis.
+        axes_cycle = matplotlib.rcParams['axes.prop_cycle']()
+        axes_props = list(itertools.islice(axes_cycle, len(self._hypotheses)))
+        for key in list(axes_props[0].keys()):
+            # explicit kwargs passed to plot() should take a precedence.
+            if key in kwargs:
+                for prop in axes_props:
+                    del prop[key]
+
+        if 'color' not in axes_props[0].keys():
+            # axes.prop_cycle does not have color. Fall back to default colors
+            from .colors import DefaultColors
+            color_it = itertools.cycle(DefaultColors)
+            for prop, c in zip(axes_props, color_it):
+                prop['color'] = c
+
+        if colors is not None:
+            if len(colors) != len(self._hypotheses):
+                raise ValueError(
+                    "`colors` should have the same number of elements as "
+                    "Hypotheses ({}), but the given length is {}.".format(
+                        len(self._hypotheses), len(colors)))
+            for prop, given_color in zip(axes_props, colors):
+                prop['color'] = given_color
 
         hypothesis_labels = [name for name, _ in self._hypotheses.items()]
         if kwargs.get('prettify_labels', False):
@@ -796,7 +816,8 @@ class ExperimentPlotter:
                     if kwargs.get('prettify_labels', False):
                         kwargs['label'] = util.prettify_labels(kwargs['label'])
                 kwargs['subplots'] = True
-            kwargs['color'] = colors[i]
+
+            kwargs.update(axes_props[i])  # e.g. color, linestyle, etc.
 
             # exclude the hypothesis if it has no runs in it
             if hypo.empty():

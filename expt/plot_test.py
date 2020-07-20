@@ -2,14 +2,17 @@
 Tests for expt.plot
 """
 
+import contextlib
 import sys
 import numpy as np
 import pandas as pd
 import pytest
+import matplotlib
 import matplotlib.pyplot as plt
 
 import expt.plot
 import expt.data
+import expt.colors
 from expt.data import Experiment, Hypothesis, Run, RunList
 
 try:
@@ -25,6 +28,18 @@ def V(x):
     kwargs = dict(_stack_offset=2) if print.__name__ == 'log' else {}
     print(x, **kwargs)
     return x
+
+
+@contextlib.contextmanager
+def matplotlib_rcparams(kwargs: dict):
+    old_values = {k: matplotlib.rcParams[k] for k in kwargs.keys()}
+    try:
+        for k in kwargs.keys():
+            matplotlib.rcParams[k] = kwargs[k]
+        yield
+    finally:
+        for k in kwargs.keys():
+            matplotlib.rcParams[k] = old_values[k]
 
 
 class TestHypothesisPlot:
@@ -229,3 +244,35 @@ class TestExperimentPlot:
         g = ex.plot(y=["a", "b0"], subplots=False, legend=False)
         assert g.figure.legends == []
         for ax in g.axes_active: assert ax.get_legend() is None
+
+    def testColorKwargs(self):
+        import cycler
+        ex = self._fixture()
+        assert len(ex.hypotheses) == 2
+
+        # Given kwargs
+        with pytest.raises(ValueError, match=r'should have the same number'):
+            g = ex.plot(colors=["red"])
+
+        g = ex.plot(colors=["magenta", "blue"])
+        for ax in g.axes_active:
+            assert ax.get_lines()[0].get_color() == 'magenta'
+            assert ax.get_lines()[1].get_color() == 'blue'
+
+        # By default, should respect matplotlib's config
+        color = cycler.cycler(color=['green', 'cyan'])
+        with matplotlib_rcparams({'axes.prop_cycle': color}):
+            g = ex.plot()
+            for ax in g.axes_active:
+                assert ax.get_lines()[0].get_color() == 'green'
+                assert ax.get_lines()[1].get_color() == 'cyan'
+
+        # if color is missing, we fall back to a default color palette
+        axprop = cycler.cycler(linestyle=['-', '--'])
+        default_colors = expt.colors.DefaultColors
+        with matplotlib_rcparams({'axes.prop_cycle': axprop}):
+            g = ex.plot()
+            for ax in g.axes_active:
+                assert ax.get_lines()[0].get_color() != ax.get_lines()[1].get_color()
+                assert ax.get_lines()[0].get_color() == default_colors[0]
+                assert ax.get_lines()[1].get_color() == default_colors[1]
