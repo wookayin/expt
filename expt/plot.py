@@ -261,7 +261,17 @@ class HypothesisPlotter:
 
             def _interpolate_if_numeric(y_series):
                 if y_series.dtype.kind in ('i', 'f'):
-                    return interpolate.interp1d(df.index, y_series, bounds_error=False)(x_samples)
+                    # y_series might contain NaN values, but interp1d does not
+                    # properly deal with nan. So we filter both of x and y series.
+                    idx_valid = ~np.isnan(y_series)
+                    if idx_valid.sum() >= 2:
+                        return interpolate.interp1d(df.index[idx_valid],
+                                                    y_series[idx_valid],
+                                                    bounds_error=False)(x_samples)
+                    else:
+                        # Insufficient data due to a empty/crashed run.
+                        # Ignore the corner case! TODO: Add warning message.
+                        return pd.Series(np.full_like(x_samples, np.nan, dtype=float))
                 else:
                     # maybe impossible to interpolate (i.e. object), skip it.
                     # (this column will be filtered out later on)
