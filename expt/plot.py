@@ -58,6 +58,12 @@ class GridPlot:
             layout = (rows, cols)
         else:
             rows, cols = layout
+            if rows == -1 and cols == -1:
+                raise ValueError("Invalid layout: {}".format(layout))
+            elif rows < 0:
+                rows = int(np.ceil(self.n_plots / cols))
+            elif cols < 0:
+                cols = int(np.ceil(self.n_plots / rows))
 
         # Calculate the base figure size
         if figsize is None:

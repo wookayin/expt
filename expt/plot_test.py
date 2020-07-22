@@ -42,6 +42,31 @@ def matplotlib_rcparams(kwargs: dict):
             matplotlib.rcParams[k] = old_values[k]
 
 
+class TestGridPlot:
+
+    def testLayout(self):
+        g = expt.plot.GridPlot(y_names=["single"])
+        assert g.axes.shape == (1, 1)
+
+        g = expt.plot.GridPlot(y_names=[str(i) for i in range(16)])
+        assert g.axes.shape == (4, 4)
+
+        g = expt.plot.GridPlot(y_names=[str(i) for i in range(28)])
+        assert g.axes.shape == (5, 6)  # 5 rows, 6 columns = 30
+
+        g = expt.plot.GridPlot(y_names=["a", "b", "c", "d", "e"],
+                               layout=(1, -1))
+        assert g.axes.shape == (1, 5)
+
+        g = expt.plot.GridPlot(y_names=["a", "b", "c", "d", "e"],
+                               layout=(-1, 1))
+        assert g.axes.shape == (5, 1)
+
+        g = expt.plot.GridPlot(y_names=["a", "b", "c", "d", "e"],
+                               layout=(2, -1))
+        assert g.axes.shape == (2, 3)  # 2 * 3 = 6 > 5
+
+
 class TestHypothesisPlot:
 
     def setup_method(self, method):
