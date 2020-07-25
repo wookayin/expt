@@ -739,8 +739,16 @@ def parse_run_tensorboard(run_folder, fillna=False,
     return df
 
 
+def _validate_run_postprocess(run):
+    if not isinstance(run, Run):
+        raise TypeError("run_postprocess_fn did not return a "
+                        "Run object; given {}".format(type(run)))
+    return run
 
-def iter_runs_serial(*path_globs, verbose=False, fillna=True) -> Iterator[Run]:
+
+def iter_runs_serial(*path_globs, verbose=False, fillna=True,
+                     run_postprocess_fn=None,
+                     ) -> Iterator[Run]:
     """
     Enumerate Run objects from the given path(s).
     """
@@ -750,19 +758,21 @@ def iter_runs_serial(*path_globs, verbose=False, fillna=True) -> Iterator[Run]:
 
         paths = list(sorted(glob(path_glob)))
         for p in paths:
-            try:
-                df = parse_run(p, verbose=verbose, fillna=fillna)
-                yield Run(p, df)
-            except (pd.errors.EmptyDataError, FileNotFoundError) as e:
-                print(f"[!] {p} : {e}", file=sys.stderr)
+            run = _handle_path(p, verbose=verbose, fillna=fillna,
+                               run_postprocess_fn=run_postprocess_fn)
+            if run:
+                yield run
 
 
-def get_runs_serial(*path_globs, verbose=False, fillna=True) -> RunList:
+def get_runs_serial(*path_globs, verbose=False, fillna=True,
+                    run_postprocess_fn=None,
+                    ) -> RunList:
     """
     Get a list of Run objects from the given path(s).
     Works in single-thread (slow, should not used outside debugging purposes).
     """
-    runs = list(iter_runs_serial(*path_globs, verbose=verbose, fillna=fillna))
+    runs = list(iter_runs_serial(*path_globs, verbose=verbose, fillna=fillna,
+                                 run_postprocess_fn=run_postprocess_fn))
 
     if not runs:
         for path_glob in path_globs:
@@ -772,20 +782,26 @@ def get_runs_serial(*path_globs, verbose=False, fillna=True) -> RunList:
     return RunList(runs)
 
 
-def _handle_path(p, verbose, fillna) -> Optional[Tuple[str, pd.DataFrame]]:
+def _handle_path(p, verbose, fillna, run_postprocess_fn=None,
+                 ) -> Optional[Run]:
     try:
         df = parse_run(p, verbose=verbose, fillna=fillna)
-        return p, df
+        run = Run(path=p, df=df)
+        if run_postprocess_fn:
+            run = run_postprocess_fn(run)
+            _validate_run_postprocess(run)
+        return run
     except (pd.errors.EmptyDataError, FileNotFoundError) as e:
+        # Ignore empty data.
         print(f"[!] {p} : {e}", file=sys.stderr, flush=True)
         return None
 
 
 def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
                       pool_class=ThreadPool,
+                      run_postprocess_fn=None,
                       ) -> RunList:
-    """
-    Get a list of Run objects from the given path(s).
+    """Get a list of Run objects from the given path(s).
     Runs in parallel.
     """
 
@@ -810,17 +826,17 @@ def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
                        "did not match any files.", file=sys.stderr)
 
             for p in paths:
-                future = pool.apply_async(_handle_path, [p, verbose, fillna])
+                future = pool.apply_async(_handle_path, [
+                    p, verbose, fillna, run_postprocess_fn])
                 futures.append(future)
 
         hits = 0
         result = []
         for future in futures:
-            p_and_df = future.get()
-            if p_and_df:
-                p, df = p_and_df
+            run: Optional[Run] = future.get()
+            if run:
                 hits += 1
-                result.append(Run(p, df))
+                result.append(run)
 
     if not hits:
         for path_glob in path_globs:
