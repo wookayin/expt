@@ -142,6 +142,11 @@ class RunList(Sequence[Run]):
             o = RunList(o)
         return o
 
+    def __next__(self):
+        # This is a hack to prevent panda's pprint_thing() from converting
+        # into a sequence of Runs.
+        raise TypeError("'RunList' object is not an iterator.")
+
     def __len__(self):
         return len(self._runs)
 
@@ -273,6 +278,11 @@ class Hypothesis(Iterable[Run]):
 
     def __hash__(self):
         return hash(id(self))
+
+    def __next__(self):
+        # This is a hack to prevent panda's pprint_thing() from converting
+        # into a sequence of Runs.
+        raise TypeError("'Hypothesis' object is not an iterator.")
 
     def describe(self):
         raise NotImplementedError
