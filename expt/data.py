@@ -54,6 +54,13 @@ from .path_util import glob, exists, open, isdir
 
 T = TypeVar('T')
 
+
+try:
+    from tqdm.auto import tqdm
+except:
+    tqdm = util.NoopTqdm
+
+
 #########################################################################
 # Data Classes
 #########################################################################
@@ -350,7 +357,8 @@ class Experiment(Iterable[Hypothesis]):
         for h in (hypotheses or []):
             if not isinstance(h, Hypothesis):
                 raise TypeError("An element of hypotheses contains a wrong type: "
-                                "{} ".format(type(h)))
+                                "expected {}, but given {} ".format(
+                                    Hypothesis, type(h)))
             if h.name in self._hypotheses:
                 raise ValueError(f"Duplicate hypothesis name: `{h.name}`")
             self._hypotheses[h.name] = h
@@ -799,6 +807,7 @@ def _handle_path(p, verbose, fillna, run_postprocess_fn=None,
 
 def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
                       pool_class=ThreadPool,
+                      progress_bar=True,
                       run_postprocess_fn=None,
                       ) -> RunList:
     """Get a list of Run objects from the given path(s).
@@ -819,6 +828,8 @@ def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
 
     with Pool(processes=n_jobs) as pool:   # type: ignore
         futures = []
+        pbar = tqdm(total=1) if progress_bar else util.NoopTqdm()
+
         for path_glob in path_globs:
             paths = list(sorted(glob(path_glob)))
             if verbose and not paths:
@@ -826,9 +837,14 @@ def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
                        "did not match any files.", file=sys.stderr)
 
             for p in paths:
-                future = pool.apply_async(_handle_path, [
-                    p, verbose, fillna, run_postprocess_fn])
+                future = pool.apply_async(
+                    _handle_path, args=[p, verbose, fillna, run_postprocess_fn],
+                    callback=lambda _fut: pbar.update(1))
                 futures.append(future)
+
+            _completed = int(pbar.n)
+            pbar.reset(total=len(futures))
+            pbar.n = pbar.last_print_n = _completed
 
         hits = 0
         result = []
