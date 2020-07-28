@@ -99,8 +99,17 @@ def glob(pattern):
                     return []
                 raise
         else:
-            # Note: gfile.glob is extremely slow (way slower than gsutil)
-            return _import_gfile().glob(pattern)  # noqa
+            # A small optimization: when the pattern itself is a dir (no glob
+            # was used) or the globbing '*' is used only at the last segment,
+            # we can just simply list dir which is *much* faster than globbing.
+            if isdir(pattern):
+                return [pattern.rstrip('/')]
+            elif pattern.endswith('/*') and isdir(pattern.rstrip('*')):
+                dir_base = pattern.rstrip('*')
+                ls = _import_gfile().listdir(dir_base)
+                return [os.path.join(dir_base, entry) for entry in ls]
+            else:
+                return _import_gfile().glob(pattern)  # noqa
     else:
         return local_glob(pattern)
 
