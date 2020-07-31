@@ -827,9 +827,14 @@ def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
         raise TypeError("Unknown type for pool_class: {}".format(pool_class))
 
     with Pool(processes=n_jobs) as pool:   # type: ignore
-        futures = []
         pbar = tqdm(total=1) if progress_bar else util.NoopTqdm()
+        def _pbar_callback_done(run):
+            pbar.update(1)
+            pbar.refresh()
+        def _pbar_callback_error(e):
+            pbar.bar_style = 'danger'
 
+        futures = []
         for path_glob in path_globs:
             paths = list(sorted(glob(path_glob)))
             if verbose and not paths:
@@ -839,12 +844,15 @@ def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
             for p in paths:
                 future = pool.apply_async(
                     _handle_path, args=[p, verbose, fillna, run_postprocess_fn],
-                    callback=lambda _fut: pbar.update(1))
+                    callback=_pbar_callback_done,
+                    error_callback=_pbar_callback_error)
                 futures.append(future)
 
+            # The total number can grow while some jobs are running.
             _completed = int(pbar.n)
             pbar.reset(total=len(futures))
             pbar.n = pbar.last_print_n = _completed
+            pbar.refresh()
 
         hits = 0
         result = []
@@ -853,6 +861,9 @@ def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
             if run:
                 hits += 1
                 result.append(run)
+
+        # All runs have been collected, close the progress bar.
+        pbar.close()
 
     if not hits:
         for path_glob in path_globs:
