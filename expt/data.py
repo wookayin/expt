@@ -806,11 +806,12 @@ def _handle_path(p, verbose, fillna, run_postprocess_fn=None,
 
 
 def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
-                      pool_class=ThreadPool,
+                      pool_class=MultiprocessPool,
                       progress_bar=True,
                       run_postprocess_fn=None,
                       ) -> RunList:
     """Get a list of Run objects from the given path(s).
+
     Runs in parallel.
     """
 
@@ -820,7 +821,7 @@ def get_runs_parallel(*path_globs, verbose=False, n_jobs=8, fillna=True,
                 }.get(pool_class, None)
         if not Pool:
             raise ValueError("Unknown pool_class: {} ".format(pool_class) +
-                             "(expected threading/multiprocessing)")
+                             "(expected: threading or multiprocessing)")
     elif callable(pool_class):
         Pool = pool_class
     else:
