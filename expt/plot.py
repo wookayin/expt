@@ -555,7 +555,9 @@ class HypothesisPlotter:
             # show shadowed range of 1-std errors
             for ax, yi in zip(np.asarray(axes).flat, y):
                 mean_line = ax.get_lines()[-1]
-                ax.fill_between((mean - std)[yi].index,
+                x = kwargs.get('x', None)
+                x_values = mean[x].values if x else mean[yi].index
+                ax.fill_between(x_values,
                                 (mean - std)[yi].values,
                                 (mean + std)[yi].values,
                                 color=mean_line.get_color(),

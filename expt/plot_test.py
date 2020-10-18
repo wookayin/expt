@@ -77,12 +77,19 @@ class TestHypothesisPlot:
 
     @staticmethod
     def _fixture() -> Hypothesis:
-        data = dict()
-        data['step'] = np.arange(1000)
-        data['loss'] = np.exp((-data['step'] + 700) / 1000.0)
-        data['accuracy'] = data['step'] / 1000.0
-        data['lr'] = np.ones(1000) * 0.001
-        runs = [Run("seed0", pd.DataFrame(data))]
+        def _make_data(max_accuracy=1.0):
+            data = dict()
+            data['step'] = np.arange(10, 10000 + 10, 10)
+            data['loss'] = np.exp((-data['step'] + 700) / 1000.0)
+            data['loss'] += np.random.normal(0, 0.1, size=1000)
+            data['accuracy'] = (data['step'] / data['step'].max()) * max_accuracy
+            data['lr'] = np.ones(1000) * 0.001
+            return data
+
+        runs = [
+            Run("seed0", pd.DataFrame(_make_data(max_accuracy=0.9))),
+            Run("seed1", pd.DataFrame(_make_data(max_accuracy=1.0))),
+        ]
         h = Hypothesis(name="hypo_plot", runs=runs)
         return h
 
@@ -181,6 +188,26 @@ class TestHypothesisPlot:
             assert bool(ax.get_legend()) == (ax.get_title() == 'lr'), str(ax.get_title())
         # https://matplotlib.org/3.2.1/api/_as_gen/matplotlib.pyplot.legend.html
         assert ax.get_legend()._loc in (10, 'center')
+
+    def testErrorRangeAveraging(self):
+        hypothesis = self._fixture()
+
+        # show individual runs
+        g = hypothesis.plot(x='step', y=['loss', 'accuracy'], rolling=10)
+        assert len(g['accuracy'].get_lines()) == 1 + len(hypothesis.runs)
+        for l in g['accuracy'].get_lines():
+            assert l.get_xdata().max() >= 9900
+
+        # fill 1-std range.
+        # TODO: validate color, alpha, etc.
+        g = hypothesis.plot(x='step', y=['loss', 'accuracy'],
+                            err_style='fill',
+                            rolling=10)
+        assert g['accuracy'].collections, "no filled area found"
+        for fill in g['accuracy'].collections:
+            assert fill.get_paths()[0].vertices.max() >= 9900
+
+        # TODO: what if some runs are truncated?
 
 
 class TestExperimentPlot:
