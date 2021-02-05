@@ -189,6 +189,16 @@ class TestHypothesisPlot:
         # https://matplotlib.org/3.2.1/api/_as_gen/matplotlib.pyplot.legend.html
         assert ax.get_legend()._loc in (10, 'center')
 
+        # Custom override with labels=... argument
+        g = hypothesis.plot()
+        g.add_legend(ax=0, labels=["custom label"])
+        leg = g.axes_active[0].get_legend()
+        assert len(leg.texts) == 1
+        assert leg.texts[0]._text == 'custom label'
+
+        with pytest.raises(ValueError, match='should have length'):
+            g.add_legend(ax=0, labels=["custom label", "too many args"])
+
     def testErrorRangeAveraging(self):
         hypothesis = self._fixture()
 

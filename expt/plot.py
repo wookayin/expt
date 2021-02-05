@@ -5,7 +5,7 @@ Plotting behavior (matplotlib, hvplot, etc.) for expt.data
 import difflib
 import itertools
 import warnings
-from typing import Union, Iterable, Iterator, Optional
+from typing import Union, Iterable, Iterator, Optional, Sequence
 from typing import Tuple, List, Dict, Any
 
 import numpy as np
@@ -177,7 +177,9 @@ class GridPlot:
 
     def add_legend(self,
                    ax: Optional[Union[Axes, str, int]] = None,
-                   loc=None, **kwargs):
+                   loc=None,
+                   labels: Optional[Sequence[str]] = None,
+                   **kwargs):
         """Put a legend for all objects aggregated over the axes.
 
         If ax is given, a legend will be put at the specified Axes. If it
@@ -187,6 +189,7 @@ class GridPlot:
 
         Args:
             loc: str or pair of floats (see matplotlib.pyplot.legend)
+            labels: If given, this will override label names.
             kwargs: Additional kwargs passed to ax.legend().
               e.g., ncol=4
         """
@@ -202,9 +205,14 @@ class GridPlot:
             else:
                 target = ax
 
-        legend_labels = zip(*[(h, l) for (l, h) in
-                              sorted(self._collect_legend().items())])
-        target.legend(*legend_labels, loc=loc, **kwargs)
+        legend_handles, legend_labels = zip(
+            *[(h, l) for (l, h) in sorted(self._collect_legend().items())])
+        if labels is not None:
+            if len(labels) != len(legend_labels):
+                raise ValueError(f"labels {labels} should have length {len(legend_labels)} "
+                                 f"but was given {len(labels)}")
+            legend_labels = list(labels)
+        target.legend(legend_handles, legend_labels, loc=loc, **kwargs)
 
         if isinstance(target, Axes) and not target.lines:
             target.axis('off')
