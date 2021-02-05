@@ -2,7 +2,7 @@ import sys
 if sys.version_info < (3, 6):
     raise RuntimeError("This library requires python 3.6+.")
 
-__version__ = '0.2.1'
+__version__ = '0.3.0.dev0'
 
 
 # auto-import submodules
