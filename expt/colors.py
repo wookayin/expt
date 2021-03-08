@@ -65,9 +65,18 @@ Trubetskoy17 = (
 
 
 try:
-    from pandas.plotting._matplotlib.style import _get_standard_colors
-except:
-    # support older pandas version as well
-    from pandas.plotting._style import _get_standard_colors
+    # pandas 1.2+
+    from pandas.plotting._matplotlib.style import get_standard_colors
+except ImportError:
+    get_standard_colors = None
 
-get_standard_colors = _get_standard_colors
+
+if get_standard_colors is None:
+    try:
+        # pandas 1.0.0+
+        from pandas.plotting._matplotlib.style import _get_standard_colors
+    except ImportError:
+        # pandas <1.0
+        from pandas.plotting._style import _get_standard_colors
+
+    get_standard_colors = _get_standard_colors
