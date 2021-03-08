@@ -68,9 +68,8 @@ except:
 
 @dataclass
 class Run:
-    """
-    Represents a single run, containing one pd.DataFrame object as well as
-    other metadata (path, etc.)
+    """Represents a single run, containing one pd.DataFrame object
+    as well as other metadata (path, etc.)
     """
     path: str
     df: pd.DataFrame
@@ -98,12 +97,12 @@ class Run:
 
     @property
     def name(self) -> str:
-        '''Returns the last segment of the path.'''
+        """Returns the last segment of the path."""
         path = self.path.rstrip('/')
         return os.path.basename(path)
 
     def to_hypothesis(self) -> 'Hypothesis':
-        '''Create a new `Hypothesis` consisting of only this run.'''
+        """Create a new `Hypothesis` consisting of only this run."""
         return Hypothesis.of(self)
 
     def plot(self, *args, subplots=True, **kwargs):
@@ -114,9 +113,8 @@ class Run:
 
 
 class RunList(Sequence[Run]):
-    """
-    A (immutable) list of Run objects, but with some useful utility methods
-    such as filtering, searching, and handy format conversion.
+    """A (immutable) list of Run objects, but with some useful utility
+    methods such as filtering, searching, and handy format conversion.
     """
     def __init__(self, runs: Iterable[Run]):
         runs = self._validate_type(runs)
@@ -168,43 +166,43 @@ class RunList(Sequence[Run]):
         return list(self._runs)
 
     def to_dataframe(self) -> pd.DataFrame:
-        '''Return a DataFrame consisting of columns "name" and "run".'''
+        """Return a DataFrame consisting of columns `name` and `run`."""
         return pd.DataFrame({
             'name': [r.name for r in self._runs],
             'run': self._runs,
         })
 
     def filter(self, fn: Union[Callable[[Run], bool], str]) -> 'RunList':
-        '''Apply a filter function (Run -> bool) and return the filtered runs
+        """Apply a filter function (Run -> bool) and return the filtered runs
         as another RunList. If a string is given, we convert it as a matcher
-        function (see fnmatch) that matches `run.name`.'''
+        function (see fnmatch) that matches `run.name`."""
         if isinstance(fn, str):
             pat = str(fn)
             fn = lambda run: fnmatch.fnmatch(run.name, pat)
         return RunList(filter(fn, self._runs))
 
     def grep(self, regex: Union[str, 're.Pattern'], flags=0):
-        '''Apply a regex-based filter on the path of `Run`, and return the
-        matched `Run`s as a RunList.'''
+        """Apply a regex-based filter on the path of `Run`, and return the
+        matched `Run`s as a RunList."""
         if isinstance(regex, str):
             regex = re.compile(regex, flags=flags)
         return self.filter(lambda r: bool(regex.search(r.path)))
 
     def map(self, func: Callable[[Run], Any]) -> List:
-        '''Apply func for each of the runs. Return the transformation
-        as a plain list.'''
+        """Apply func for each of the runs. Return the transformation
+        as a plain list."""
         return list(map(func, self._runs))
 
     def to_hypothesis(self, name: str) -> 'Hypothesis':
-        '''Create a new Hypothesis instance containing all the runs
-        as the current RunList instance.'''
+        """Create a new Hypothesis instance containing all the runs
+        as the current RunList instance."""
         return Hypothesis.of(self, name=name)
 
     def groupby(self,
                 by: Callable[[Run], T], *,
                 name: Callable[[T], str] = str,
                 ) -> Iterator[Tuple[T, 'Hypothesis']]:
-        r'''Group runs into hypotheses with the key function `by` (Run -> key).
+        r"""Group runs into hypotheses with the key function `by` (Run -> key).
         This will enumerate tuples (`group_key`, Hypothesis) where `group_key`
         is the result of the key function for each group, and a Hypothesis
         object (with name `name(group_key)`) will consist of all the runs
@@ -218,7 +216,7 @@ class RunList(Sequence[Run]):
             key_func = lambda run: re.search("algo=(\w+),lr=([.0-9]+)", run.name).group(1, 2)
             for group_name, hypothesis in runs.groupby(key_func):
                 ...
-        '''
+        """
         series = pd.Series(self._runs)
         groupby = series.groupby(lambda i: by(series[i]))
 
@@ -227,7 +225,7 @@ class RunList(Sequence[Run]):
             yield group, Hypothesis.of(runs_in_group, name=name(group))
 
     def extract(self, pat: str, flags: int = 0) -> pd.DataFrame:
-        r'''Extract capture groups in the regex pattern `pat` as columns.
+        r"""Extract capture groups in the regex pattern `pat` as columns.
 
         Example:
             >>> runs[0].name
@@ -235,7 +233,7 @@ class RunList(Sequence[Run]):
             >>> df = runs.extract(r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
             >>> assert list(df.columns) == ['algo', 'env_id', 'seed', 'run']
 
-        '''
+        """
         df: pd.DataFrame = self.to_dataframe()
         df = df['name'].str.extract(pat, flags=flags)
         df['run'] = list(self._runs)
@@ -278,7 +276,7 @@ class Hypothesis(Iterable[Run]):
         return pd.DataFrame({r.path: r.df[k] for r in self.runs})
 
     def __repr__(self) -> str:
-        return (f"Hypothesis({self.name!r}, <{len(self.runs)} runs>)")
+        return f"Hypothesis({self.name!r}, <{len(self.runs)} runs>)"
 
     def __len__(self) -> int:
         return len(self.runs)
@@ -371,7 +369,7 @@ class Experiment(Iterable[Hypothesis]):
                        hypothesis_namer: Callable[..., str] = str,
                        name: Optional[str] = None,
                        ) -> 'Experiment':
-        '''Constructs a new Experiment object from a DataFrame instance
+        """Constructs a new Experiment object from a DataFrame instance
         structured as per the convention.
 
         Args:
@@ -384,7 +382,7 @@ class Experiment(Iterable[Hypothesis]):
             (a str or tuple) that pandas groupby produces into hypothesis name.
             This function should take one positional argument for the group key.
           name: The name for the produced `Experiment`.
-        '''
+        """
         if by is None:
             # Automatically determine the column from df.
             by_columns = list(sorted(set(df.columns).difference([run_column])))
@@ -455,10 +453,13 @@ class Experiment(Iterable[Hypothesis]):
         return tuple(self._hypotheses.values())
 
     def select_top(self, criteria) -> Hypothesis:
-        '''
-        criteria: str (y_name) or Callable(Hypothesis -> number).
+        """Choose top hypothesis based on the criteria.
+
         TODO: make it more general using sorted, etc.
-        '''
+
+        Args:
+            criteria: str (y_name) or Callable(Hypothesis -> number).
+        """
         if isinstance(criteria, str):
             y = str(criteria)  # make a copy for closure
             criteria = lambda h: h.mean()[y].max()   # TODO general criteria
@@ -548,7 +549,7 @@ class Experiment(Iterable[Hypothesis]):
             max(1, int(len(series) * portion))).mean().iloc[-1])
 
     def summary(self, columns=None, aggregate=None) -> pd.DataFrame:
-        '''Return a DataFrame that summarizes the current experiments,
+        """Return a DataFrame that summarizes the current experiments,
         whose rows are all hypothesis.
 
         Args:
@@ -564,7 +565,7 @@ class Experiment(Iterable[Hypothesis]):
         >>> df = ex.summary(columns=['index', 'loss', 'return'])
         >>> df.style.background_gradient(cmap='viridis')
 
-        '''
+        """
         columns = columns or (['index'] + list(self.columns))
         aggregate = aggregate or self.AGGREGATE_MEAN_LAST(0.1)
 
@@ -610,9 +611,7 @@ class Experiment(Iterable[Hypothesis]):
 
 def parse_run(run_folder, fillna=False,
               verbose=False) -> pd.DataFrame:
-    """
-    Create a pd.DataFrame object from a single directory (folder).
-    """
+    """Create a pd.DataFrame object from a single directory."""
     if verbose:
         # TODO Use python logging
         print(f"Reading {run_folder} ...",
@@ -644,10 +643,7 @@ def parse_run(run_folder, fillna=False,
 
 def parse_run_progresscsv(run_folder, fillna=False,
                           verbose=False) -> pd.DataFrame:
-    """
-    Create a pd.DataFrame object that contains information from
-    progress.csv or log.csv file (as convention)
-    """
+    """Create a pandas DataFrame object from progress.csv per convention."""
     # Try progress.csv or log.csv from folder
     detected_csv = None
     for fname in ('progress.csv', 'log.csv'):
@@ -666,7 +662,8 @@ def parse_run_progresscsv(run_folder, fillna=False,
 
     # Read the detected file `p`
     if verbose:
-        print(f"parse_run (csv): Reading {detected_csv}", file=sys.stderr, flush=True)
+        print(f"parse_run (csv): Reading {detected_csv}",
+              file=sys.stderr, flush=True)
 
     with open(detected_csv, mode='r') as f:
         df = pd.read_csv(f)
@@ -679,10 +676,7 @@ def parse_run_progresscsv(run_folder, fillna=False,
 
 def parse_run_tensorboard(run_folder, fillna=False,
                           verbose=False) -> pd.DataFrame:
-    """
-    Create a pd.DataFrame object that contains all scalar summaries from the
-    tensorboard eventfile (or its directory).
-    """
+    """Create a pandas DataFrame from tensorboard eventfile or run directory."""
     event_file = list(sorted(glob(os.path.join(run_folder, '*events.out.tfevents.*'))))
 
     if not event_file:  # no event file detected
@@ -757,9 +751,8 @@ def _validate_run_postprocess(run):
 def iter_runs_serial(*path_globs, verbose=False, fillna=True,
                      run_postprocess_fn=None,
                      ) -> Iterator[Run]:
-    """
-    Enumerate Run objects from the given path(s).
-    """
+    """Enumerate Run objects from the given path(s)."""
+
     for path_glob in path_globs:
         if verbose:
             print(f"get_runs: {str(path_glob)}", file=sys.stderr)
@@ -775,9 +768,10 @@ def iter_runs_serial(*path_globs, verbose=False, fillna=True,
 def get_runs_serial(*path_globs, verbose=False, fillna=True,
                     run_postprocess_fn=None,
                     ) -> RunList:
-    """
-    Get a list of Run objects from the given path(s).
-    Works in single-thread (slow, should not used outside debugging purposes).
+    """Get a list of Run objects from the given path(s).
+
+    This works in single-thread (very slow, should not used other than
+    debugging purposes).
     """
     runs = list(iter_runs_serial(*path_globs, verbose=verbose, fillna=fillna,
                                  run_postprocess_fn=run_postprocess_fn))
