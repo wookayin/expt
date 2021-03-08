@@ -74,7 +74,7 @@ class DeployCommand(Command):
 
 
 install_requires = [
-    'numpy',
+    'numpy>=1.16.5',
     'scipy',
     'dataclasses>=0.6',
     'typeguard>=2.6.1',
