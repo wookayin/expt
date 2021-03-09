@@ -452,20 +452,42 @@ class Experiment(Iterable[Hypothesis]):
     def hypotheses(self) -> Sequence[Hypothesis]:
         return tuple(self._hypotheses.values())
 
-    def select_top(self, criteria) -> Hypothesis:
-        """Choose top hypothesis based on the criteria.
-
-        TODO: make it more general using sorted, etc.
+    def select_top(self, key, k=None, descending=True,
+                   ) -> Union[Hypothesis, Sequence[Hypothesis]]:
+        """Choose a hypothesis that has the largest value on the specified column.
 
         Args:
-            criteria: str (y_name) or Callable(Hypothesis -> number).
+            key: str (y_name) or Callable(Hypothesis -> number).
+            k: If None, the top-1 hypothesis will be returned. Otherwise (integer),
+              top-k hypotheses will be returned as a tuple.
+            descending: If True, the hypothesis with largest value in key will be
+              chosen. If False, the hypothesis with smallest value will be chosen.
+        Returns: the top-1 hypothesis (if `k` is None) or a tuple of k hypotheses
+            in the order specified by `key`.
         """
-        if isinstance(criteria, str):
-            y = str(criteria)  # make a copy for closure
-            criteria = lambda h: h.mean()[y].max()   # TODO general criteria
+        if k is not None and k <= 0:
+            raise ValueError("k must be greater than 0.")
+        if k is not None and k > len(self._hypotheses):
+            raise ValueError("k must be smaller than the number of "
+                             "hypotheses ({})".format(len(self._hypotheses)))
 
-        assert callable(criteria)
-        return sorted(self.hypotheses, key=criteria, reverse=True)[0]
+        if isinstance(key, str):
+            y = str(key)  # make a copy for closure
+            if descending:
+                key = lambda h: h.mean()[y].max()
+            else:
+                key = lambda h: h.mean()[y].min()
+        elif callable(key):
+            pass  # key: Hypothesis -> scalar.
+        else:
+            raise TypeError(f"`key` must be a str or a callable, but got: {type(key)}")
+
+        candidates = sorted(self.hypotheses, key=key, reverse=descending)
+        assert isinstance(candidates, list)
+        if k is None:
+            return candidates[0]
+        else:
+            return candidates[:k]
 
     def __iter__(self) -> Iterator[Hypothesis]:
         return iter(self._hypotheses.values())

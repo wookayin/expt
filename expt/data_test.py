@@ -267,6 +267,31 @@ class TestExperiment(_TestBase):
         with pytest.raises(NotImplementedError):  # TODO
             r = V(ex[['hyp1', 'hyp0'], 'a'])
 
+    def testTopK(self):
+        hypos = [
+            Hypothesis(f"hyp{i}", Run(f'r{i}', pd.DataFrame({
+                "score": [i * 100],  # the greater, the better (argmax: 4)
+                "loss" : -i,         # the lower,   the better (argmax: 4)
+            })))
+            for i in range(5)
+        ]
+        ex = Experiment(name="ex", hypotheses=hypos)
+
+        # top-1
+        assert ex.select_top("score") is hypos[4]
+        assert ex.select_top("loss", descending=False) is hypos[4]
+
+        # top-K as list
+        assert ex.select_top("score", k=2) == [hypos[4], hypos[3]]
+        assert ex.select_top("score", descending=False, k=3,
+                             ) == [hypos[0], hypos[1], hypos[2]]
+
+        # invalid inputs
+        with pytest.raises(ValueError, match='k must be greater than 0'):
+            ex.select_top("score", k=0)
+        with pytest.raises(ValueError, match='k must be smaller than the number of hypotheses'):
+            ex.select_top("score", k=6)
+
 
 if __name__ == '__main__':
     sys.exit(pytest.main(["-s", "-v"] + sys.argv))
