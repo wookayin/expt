@@ -289,8 +289,15 @@ class Hypothesis(Iterable[Run]):
         # into a sequence of Runs.
         raise TypeError("'Hypothesis' object is not an iterator.")
 
-    def describe(self):
-        raise NotImplementedError
+    def describe(self) -> pd.DataFrame:
+        """Report a descriptive statistics as a DataFrame,
+        after aggregating all runs (e.g., mean).
+        """
+        return self.mean().describe()
+
+    def summary(self) -> pd.DataFrame:
+        """Return a DataFrame that summarizes the current hypothesis."""
+        return Experiment(self.name, [self]).summary()
 
     # see module expt.plot
     plot = CachedAccessor("plot", _plot.HypothesisPlotter)
