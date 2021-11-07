@@ -1,26 +1,27 @@
 """setup.py for expt"""
 
-import sys
 import os
 import re
-from setuptools import setup, Command
+import sys
+
+from setuptools import Command, setup
 
 __PATH__ = os.path.abspath(os.path.dirname(__file__))
 
 
 def read_readme():
-    with open('README.md') as f:
-        return f.read()
+  with open('README.md') as f:
+    return f.read()
 
 
 def read_version():
-    __PATH__ = os.path.abspath(os.path.dirname(__file__))
-    with open(os.path.join(__PATH__, 'expt/__init__.py')) as f:
-        version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]",
-                                  f.read(), re.M)
-    if version_match:
-        return version_match.group(1)
-    raise RuntimeError("Unable to find __version__ string")
+  __PATH__ = os.path.abspath(os.path.dirname(__file__))
+  with open(os.path.join(__PATH__, 'expt/__init__.py')) as f:
+    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]",
+                              f.read(), re.M)  # yapf: disable
+  if version_match:
+    return version_match.group(1)
+  raise RuntimeError("Unable to find __version__ string")
 
 
 __version__ = read_version()
@@ -28,49 +29,51 @@ __version__ = read_version()
 
 # brought from https://github.com/kennethreitz/setup.py
 class DeployCommand(Command):
-    description = 'Build and deploy the package to PyPI.'
-    user_options = []
+  description = 'Build and deploy the package to PyPI.'
+  user_options = []
 
-    def initialize_options(self): pass
-    def finalize_options(self): pass
+  def initialize_options(self):
+    pass
 
-    @staticmethod
-    def status(s):
-        print(s)
+  def finalize_options(self):
+    pass
 
-    def run(self):
-        import twine  # we require twine locally  # noqa
+  @staticmethod
+  def status(s):
+    print(s)
 
-        assert 'dev' not in __version__, (
-            "Only non-devel versions are allowed. "
-            "__version__ == {}".format(__version__))
+  def run(self):
+    import twine  # we require twine locally  # noqa
 
-        with os.popen("git status --short") as fp:
-            git_status = fp.read().strip()
-            if git_status:
-                print("Error: git repository is not clean.\n")
-                os.system("git status --short")
-                sys.exit(1)
+    assert 'dev' not in __version__, ("Only non-devel versions are allowed. "
+                                      "__version__ == {}".format(__version__))
 
-        try:
-            from shutil import rmtree
-            self.status('Removing previous builds ...')
-            rmtree(os.path.join(__PATH__, 'dist'))
-        except OSError:
-            pass
+    with os.popen("git status --short") as fp:
+      git_status = fp.read().strip()
+      if git_status:
+        print("Error: git repository is not clean.\n")
+        os.system("git status --short")
+        sys.exit(1)
 
-        self.status('Building Source and Wheel (universal) distribution ...')
-        os.system('{0} setup.py sdist'.format(sys.executable))
+    try:
+      from shutil import rmtree
+      self.status('Removing previous builds ...')
+      rmtree(os.path.join(__PATH__, 'dist'))
+    except OSError:
+      pass
 
-        self.status('Uploading the package to PyPI via Twine ...')
-        ret = os.system('twine upload dist/*')
-        if ret != 0:
-            sys.exit(ret)
+    self.status('Building Source and Wheel (universal) distribution ...')
+    os.system('{0} setup.py sdist'.format(sys.executable))
 
-        self.status('Creating git tags ...')
-        os.system('git tag v{0}'.format(__version__))
-        os.system('git tag --list')
-        sys.exit()
+    self.status('Uploading the package to PyPI via Twine ...')
+    ret = os.system('twine upload dist/*')
+    if ret != 0:
+      sys.exit(ret)
+
+    self.status('Creating git tags ...')
+    os.system('git tag v{0}'.format(__version__))
+    os.system('git tag --list')
+    sys.exit()
 
 
 install_requires = [
@@ -84,7 +87,7 @@ install_requires = [
 
 tests_requires = [
     'mock>=2.0.0',
-    'pytest>=5.0',   # Python 3.5+
+    'pytest>=5.0',  # Python 3.5+
     'pytest-cov',
 ]
 
