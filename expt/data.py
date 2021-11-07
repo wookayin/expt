@@ -96,6 +96,11 @@ class Run:
             path=self.path, rows=len(self.df))
 
     @property
+    def columns(self) -> Sequence[str]:
+        """Returns all column names."""
+        return list(self.df.columns)  # type: ignore
+
+    @property
     def name(self) -> str:
         """Returns the last segment of the path."""
         path = self.path.rstrip('/')

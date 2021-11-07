@@ -1,15 +1,14 @@
 import itertools
 import os
+import re
 import subprocess
 import sys
-import re
 import tempfile
 
 import numpy as np
 import pandas as pd
 import pytest
 
-import expt.data
 from expt.data import Experiment, Hypothesis, Run, RunList
 
 try:
@@ -42,8 +41,19 @@ def runs_gridsearch() -> RunList:
     return RunList(runs)
 
 
-class TestRunList(_TestBase):
+class TestRun(_TestBase):
+    def testRunProperties(self):
+        r = Run("/tmp/some-run", pd.DataFrame({
+            "a": [1, 2, 3, 4],
+            "b": [5, 6, 7, 8],
+        }))
 
+        assert r.path == "/tmp/some-run"
+        assert r.name == "some-run"
+        assert list(r.columns) == ["a", "b"]
+
+
+class TestRunList(_TestBase):
     def _fixture(self) -> RunList:
        return RunList(
             Run("r%d" % i, pd.DataFrame({"x": [i]}))
@@ -85,6 +95,7 @@ class TestRunList(_TestBase):
         assert [r.name for r in o] == ["r0", "r1", "r2", "r3", "r4"]
 
         o = V(runs[-2:5:-2])
+        assert isinstance(o, RunList)
         assert [r.name for r in o] == ["r14", "r12", "r10", "r8", "r6"]
 
     def testRunListFilter(self):
