@@ -1,8 +1,0 @@
-coverage:
-  status:
-    project:
-      # Do not mark as build failure unless it causes test coverage to decrease by 1% or more
-      default:
-        target: auto
-        threshold: 1%
-    patch: off

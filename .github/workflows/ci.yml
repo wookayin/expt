@@ -1,0 +1,44 @@
+name: "Run Tests"
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      matrix:
+        python-version:
+          - "3.6"
+          - "3.7"
+          - "3.8"
+          - "3.9"
+          - "3.10"
+
+    steps:
+      - name: Checkout expt
+        uses: actions/checkout@v2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Upgrade pip
+        run: |
+          python -m pip install -U pip
+
+      - name: Display environment settings
+        run: |
+          python -c "import sys; print(sys.version)"
+
+      - name: Install expt and dependencies
+        run: |
+          pip install -e ".[test]"
+
+      - name: Run tests
+        run: |
+          pytest --color=yes -vv -s
+
+
+# Ref: https://github.com/actions/setup-python
