@@ -1,5 +1,4 @@
-"""\
-Data structures for expt.
+"""Data structures for expt.
 
 The "Experiment" data is structured like a 4D array, i.e.
     Experiment := [hypothesis_name, run_index, index, column]
@@ -34,9 +33,8 @@ import types
 from dataclasses import dataclass  # for python 3.6, backport needed
 from multiprocessing.pool import Pool as MultiprocessPool
 from multiprocessing.pool import ThreadPool
-from typing import (Any, Callable, Dict, Generator, Iterable, Iterator, List,
-                    Mapping, MutableMapping, Optional, Sequence, Set, Tuple,
-                    TypeVar, Union)
+from typing import (Any, Callable, Iterable, Iterator, List, Mapping,
+                    MutableMapping, Optional, Sequence, Tuple, TypeVar, Union)
 
 import numpy as np
 import pandas as pd
@@ -52,7 +50,7 @@ T = TypeVar('T')
 
 try:
   from tqdm.auto import tqdm
-except:
+except ImportError:
   tqdm = util.NoopTqdm
 
 #########################################################################
@@ -115,9 +113,9 @@ class RunList(Sequence[Run]):
   """A (immutable) list of Run objects, but with some useful utility
   methods such as filtering, searching, and handy format conversion."""
 
-  def __init__(self, runs: Iterable[Run]):
+  def __init__(self, runs: Union[Run, Iterable[Run]]):
     runs = self._validate_type(runs)
-    self._runs = list(runs)
+    self._runs: List[Run] = list(runs)
 
   @classmethod
   def of(cls, runs: Iterable[Run]):
@@ -214,7 +212,8 @@ class RunList(Sequence[Run]):
       name: a function that maps the group (Key) into Hypothesis name (str).
 
     Example:
-      >>> key_func = lambda run: re.search("algo=(\w+),lr=([.0-9]+)", run.name).group(1, 2)
+      >>> key_func = lambda run: re.search(
+      >>>     "algo=(\w+),lr=([.0-9]+)", run.name).group(1, 2)
       >>> for group_name, hypothesis in runs.groupby(key_func):
       >>>   ...
 
@@ -223,7 +222,7 @@ class RunList(Sequence[Run]):
     groupby = series.groupby(lambda i: by(series[i]))
 
     group: T
-    for group, runs_in_group in groupby:
+    for group, runs_in_group in groupby:  # type: ignore
       yield group, Hypothesis.of(runs_in_group, name=name(group))
 
   def extract(self, pat: str, flags: int = 0) -> pd.DataFrame:
@@ -232,7 +231,8 @@ class RunList(Sequence[Run]):
     Example:
       >>> runs[0].name
       "ppo-halfcheetah-seed0"
-      >>> df = runs.extract(r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
+      >>> pattern = r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
+      >>> df = runs.extract(pattern)
       >>> assert list(df.columns) == ['algo', 'env_id', 'seed', 'run']
 
     """
@@ -338,19 +338,19 @@ class Hypothesis(Iterable[Run]):
 
   def mean(self, *args, **kwargs) -> pd.DataFrame:
     g = self.grouped
-    return g.mean(*args, **kwargs)
+    return g.mean(*args, **kwargs)  # type: ignore
 
   def std(self, *args, **kwargs) -> pd.DataFrame:
     g = self.grouped
-    return g.std(*args, **kwargs)
+    return g.std(*args, **kwargs)  # type: ignore
 
   def min(self, *args, **kwargs) -> pd.DataFrame:
     g = self.grouped
-    return g.min(*args, **kwargs)
+    return g.min(*args, **kwargs)  # type: ignore
 
   def max(self, *args, **kwargs) -> pd.DataFrame:
     g = self.grouped
-    return g.max(*args, **kwargs)
+    return g.max(*args, **kwargs)  # type: ignore
 
 
 class Experiment(Iterable[Hypothesis]):
@@ -522,7 +522,7 @@ class Experiment(Iterable[Hypothesis]):
 
   def __repr__(self) -> str:
     return (
-        f"Experiment('{self.name}', {len(self._hypotheses)} hypotheses: [ \n " +
+        f"Experiment('{self.name}', {len(self._hypotheses)} hypotheses: [\n " +
         '\n '.join([repr(exp) for exp in self.hypotheses]) + "\n])")
 
   def __getitem__(
@@ -555,10 +555,10 @@ class Experiment(Iterable[Hypothesis]):
       hypo_key, column = key
       hypos = self[hypo_key]
       if isinstance(hypos, list):
-        raise NotImplementedError("2-dim fancy indexing is not implemented")  # yapf: disable
+        raise NotImplementedError("2-dim fancy indexing is not implemented")
       return hypos[column]  # type: ignore
     elif isinstance(key, Iterable):
-      key = list(key)
+      key = list(key)  # type: ignore
       if all(isinstance(k, bool) for k in key):
         # fancy indexing through bool
         if len(key) != len(self._hypotheses):
@@ -616,7 +616,7 @@ class Experiment(Iterable[Hypothesis]):
 
     Example Usage:
 
-      >>> pd.set_option('display.max_colwidth', 2000)   # hypothesis name can be long!
+      >>> pd.set_option('display.max_colwidth', 2000)   # deal with long names?
       >>> df = ex.summary(columns=['index', 'loss', 'return'])
       >>> df.style.background_gradient(cmap='viridis')
 
@@ -626,8 +626,8 @@ class Experiment(Iterable[Hypothesis]):
 
     df = pd.DataFrame({'hypothesis': [h.name for h in self.hypotheses]})
     hypo_means = [
-        (h.mean() if not all(len(df) == 0 for df in h._dataframes) \
-                  else pd.DataFrame())
+        (h.mean() if not all(len(df) == 0
+                             for df in h._dataframes) else pd.DataFrame())
         for h in self.hypotheses
     ]
 
@@ -647,7 +647,7 @@ class Experiment(Iterable[Hypothesis]):
           return np.nan
         aggregate_fn = aggregate
         if not callable(aggregate_fn):
-          aggregate_fn = aggregate[column]
+          aggregate_fn = aggregate[column]  # type: ignore
         v = aggregate_fn(series) if column != 'index' else series.max()
         return v
 
@@ -692,7 +692,8 @@ def parse_run(run_folder, fillna=False, verbose=False) -> pd.DataFrame:
       if verbose:
         print(f"{fn.__name__} -> {e}\n", file=sys.stderr, flush=True)
   else:
-    raise pd.errors.EmptyDataError(f"Cannot handle dir: {run_folder}")
+    raise pd.errors.EmptyDataError(  # type: ignore
+        f"Cannot handle dir: {run_folder}")
 
   # add some optional metadata... (might not be preserved afterwards)
   if df is not None:
@@ -725,8 +726,9 @@ def parse_run_progresscsv(run_folder,
     print(f"parse_run (csv): Reading {detected_csv}",
           file=sys.stderr, flush=True)  # yapf: disable
 
+  df: pd.DataFrame
   with open(detected_csv, mode='r') as f:
-    df = pd.read_csv(f)
+    df = pd.read_csv(f)  # type: ignore
 
   if fillna:
     df = df.fillna(0)
@@ -742,7 +744,8 @@ def parse_run_tensorboard(run_folder,
       sorted(glob(os.path.join(run_folder, '*events.out.tfevents.*'))))
 
   if not event_file:  # no event file detected
-    raise pd.errors.EmptyDataError(f"No event file detected in {run_folder}")
+    raise pd.errors.EmptyDataError(  # type: ignore
+        f"No event file detected in {run_folder}")
   event_file = event_file[-1]  # pick the last one
   if verbose:
     print(f"parse_run (tfevents) : Reading {event_file} ...",
@@ -759,9 +762,8 @@ def parse_run_tensorboard(run_folder,
     def summary_iterator(path):
       for r in RecordIterator(path, ""):
         yield event_pb2.Event.FromString(r)
-  except:
-    from tensorflow.python.summary.summary_iterator import \
-        summary_iterator  # type: ignore
+  except Exception:
+    from tensorflow.python.summary.summary_iterator import summary_iterator
 
   def _read_proto_value(node, path: str):
     for p in path.split('.'):
@@ -771,11 +773,14 @@ def parse_run_tensorboard(run_folder,
     return node
 
   def _extract_scalar_from_proto(value, step):
+
     if value.HasField('simple_value'):  # v1
       simple_value = _read_proto_value(value, 'simple_value')
       yield step, value.tag, simple_value
+
     elif value.HasField('metadata'):  # v2 eventfile
-      if _read_proto_value(value, 'metadata.plugin_data.plugin_name') == 'scalars':  # yapf: disable
+      plugin_name = _read_proto_value(value, 'metadata.plugin_data.plugin_name')
+      if plugin_name == 'scalars':
         t = _read_proto_value(value, 'tensor')
         if t:
           dtype = DType(t.dtype).as_numpy_dtype
@@ -827,7 +832,8 @@ def iter_runs_serial(
     paths = list(sorted(glob(path_glob)))
     for p in paths:
       run = _handle_path(p, verbose=verbose, fillna=fillna,
-                         run_postprocess_fn=run_postprocess_fn)  # yapf: disable
+                         run_postprocess_fn=run_postprocess_fn,
+                         )  # yapf: disable
       if run:
         yield run
 
@@ -864,7 +870,7 @@ def _handle_path(p, verbose, fillna, run_postprocess_fn=None) -> Optional[Run]:
       run = run_postprocess_fn(run)
       _validate_run_postprocess(run)
     return run
-  except (pd.errors.EmptyDataError, FileNotFoundError) as e:
+  except (pd.errors.EmptyDataError, FileNotFoundError) as e:  # type: ignore
     # Ignore empty data.
     print(f"[!] {p} : {e}", file=sys.stderr, flush=True)
     return None
@@ -905,7 +911,7 @@ def get_runs_parallel(
       pbar.refresh()
 
     def _pbar_callback_error(e):
-      pbar.bar_style = 'danger'
+      pbar.bar_style = 'danger'  # type: ignore
 
     futures = []
     for path_glob in path_globs:

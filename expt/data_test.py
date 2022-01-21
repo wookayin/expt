@@ -214,7 +214,8 @@ class TestExperiment(_TestBase):
 
     # If `by` is missing, cannot be automatically determined.
     with pytest.raises(
-        ValueError, match=re.escape("Candidates: ['algo', 'env_id', 'seed']")):
+        ValueError, match=re.escape("Candidates: ['algo', 'env_id', 'seed']")
+    ):  # yapf: disable
       Experiment.from_dataframe(df)
 
     # implicit groupby via from_dataframe
@@ -222,7 +223,7 @@ class TestExperiment(_TestBase):
     ex = Experiment.from_dataframe(df, by="algo", name="Exp.foobar")
     assert len(ex.hypotheses) == 2
     assert list(V(ex["ppo"].runs)) == [r for r in runs_gridsearch if "ppo" in r.name]
-    assert list(V( ex["sac"].runs)) == [r for r in runs_gridsearch if "sac" in r.name]
+    assert list(V(ex["sac"].runs)) == [r for r in runs_gridsearch if "sac" in r.name]
     assert ex.name == "Exp.foobar"
     # yapf: enable
 

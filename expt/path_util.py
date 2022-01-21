@@ -21,7 +21,7 @@ GSUTIL_NO_MATCHES = 'One or more URLs matched no objects'
 def _import_gfile():
   # Reference: https://www.tensorflow.org/api_docs/python/tf/io/gfile
   try:
-    import tensorflow.io.gfile as gfile
+    import tensorflow.io.gfile as gfile  # type: ignore
     return gfile
   except:
     pass
@@ -42,6 +42,7 @@ def gsutil(*args) -> List[str]:
   p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
   lines = []
+  assert p.stdout is not None
   for line in p.stdout:
     line = line.rstrip()
     if not isinstance(line, str):

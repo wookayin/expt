@@ -1,6 +1,4 @@
-"""\
-Plotting behavior (matplotlib, hvplot, etc.) for expt.data
-"""
+"""Plotting behavior (matplotlib, hvplot, etc.) for expt.data"""
 
 import difflib
 import itertools
