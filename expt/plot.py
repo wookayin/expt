@@ -3,8 +3,8 @@
 import difflib
 import itertools
 import warnings
-from typing import (Any, Dict, Iterable, Iterator, List, Optional, Sequence,
-                    Tuple, Union)
+from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
+                    Tuple, TypeVar, Union)
 
 import matplotlib.ticker
 import numpy as np
@@ -13,12 +13,14 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from scipy import interpolate
 
-from . import data, util
+from . import util
 
 # yapf: disable
 warnings.filterwarnings("ignore", category=UserWarning,
                         message='Creating legend with loc="best"')
 # yapf: enable
+
+Hypothesis = 'expt.data.Hypothesis'  # expt.data.Hypothesis
 
 
 class GridPlot:
@@ -90,8 +92,9 @@ class GridPlot:
     else:
       raise ValueError("If fig is given, axes should be given as well")
 
-    self._fig: Figure = fig
-    self._axes: np.ndarray = axes
+    self._fig: Figure = fig  # type: ignore
+    self._axes: np.ndarray = axes  # type: ignore
+    assert self._axes is not None
 
     for yi, ax in zip(self._y_names, self.axes_active):
       ax.set_title(yi)
@@ -140,7 +143,7 @@ class GridPlot:
       except (ValueError, IndexError) as e:
         raise ValueError(
             "Unknown index: {}. Close matches: {}".format(
-            key, difflib.get_close_matches(key, self._y_names))
+                key, difflib.get_close_matches(key, self._y_names))
         ) from e  # yapf: disable
 
       # TODO: support fancy indeing (multiple keys)
@@ -232,7 +235,7 @@ class GridPlot:
 
 class HypothesisPlotter:
 
-  def __init__(self, hypothesis: 'Hypothesis'):
+  def __init__(self, hypothesis: Hypothesis):  # type: ignore
     self._parent = hypothesis
 
   @property
@@ -270,6 +273,7 @@ class HypothesisPlotter:
     # get interpolated dataframes
     df_interp_list = []
     for df in df_list:
+      df: pd.DataFrame
       if x_column is not None:
         df = df.set_index(x_column)
 
@@ -298,11 +302,13 @@ class HypothesisPlotter:
       df_interp.set_index(x_column, inplace=True)
       df_interp_list.append(df_interp)
 
-    # have individual interpolation data for each run cached (for the last call).
+    # Have individual interpolation data for each run that has been cached
+    # (for the last call).
     self._df_interp_list = df_interp_list
 
     grouped = pd.concat(df_interp_list, sort=False).groupby(level=0)
-    mean, std = grouped.mean(), grouped.std()
+    mean: pd.DataFrame = grouped.mean()  # type: ignore
+    std: pd.DataFrame = grouped.std()  # type: ignore
 
     return mean, std
 
@@ -348,9 +354,9 @@ class HypothesisPlotter:
       - err_style (str): How to show individual runs (traces) or
           confidence interval as shaded area.
           Possible values: (None, 'runs', 'unit_traces', 'band', 'fill')
-            (i) runs, unit_traces: Show individual runs/traces (see runs_alpha).
-            (ii) band, fill: Show as shaded area (see std_alpha).
-            (iii) None or False: do not display any errors.
+            (i) runs, unit_traces: Show individual runs/traces (see runs_alpha)
+            (ii) band, fill: Show as shaded area (see std_alpha)
+            (iii) None or False: do not display any errors
       - std_alpha (float): If not None, will show the 1-std range as a
           shaded area. Defaults 0.2,
       - runs_alpha (float): If not None, will draw an individual line
@@ -408,8 +414,8 @@ class HypothesisPlotter:
 
     # there might be many NaN values if each column is being logged
     # at a different period. We fill in the missing values.
-    mean = mean.interpolate()
-    std = std.interpolate()
+    mean = mean.interpolate()  # type: ignore
+    std = std.interpolate()  # type: ignore
 
     # determine which columns to draw (i.e. y) before smoothing.
     # should only include numerical values
@@ -933,6 +939,7 @@ def autoformat_xaxis(ax: Axes, scale: Optional[float] = None):
   if scale is None:
     scale = ax.xaxis.get_data_interval()[1]
 
+  assert scale is not None
   if scale >= 1e6:
     ticks = FORMATTER_MEGA
   elif scale >= 1e3:

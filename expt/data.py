@@ -573,7 +573,7 @@ class Experiment(Iterable[Hypothesis]):
         # fancy indexing through int?  # TODO: support str
         hypo_keys = list(self._hypotheses.keys())
         to_key = lambda k: k if isinstance(k, str) else hypo_keys[k]
-      return [self._hypotheses[to_key(k)] for k in key]
+      return [self._hypotheses[to_key(k)] for k in key]  # type: ignore
     else:
       raise ValueError("Unsupported index: {}".format(key))
 
@@ -757,15 +757,16 @@ def parse_run_tensorboard(run_folder,
   from tensorflow.python.framework.dtypes import DType
   try:
     # avoid DeprecationWarning on tf_record_iterator
+    # pyright: reportMissingImports=false
     from tensorflow.python._pywrap_record_io import RecordIterator
 
     def summary_iterator(path):
       for r in RecordIterator(path, ""):
-        yield event_pb2.Event.FromString(r)
+        yield event_pb2.Event.FromString(r)  # type: ignore
   except Exception:
     from tensorflow.python.summary.summary_iterator import summary_iterator
 
-  def _read_proto_value(node, path: str):
+  def _read_proto(node, path: str):
     for p in path.split('.'):
       node = getattr(node, p, None)
       if node is None:
@@ -775,13 +776,13 @@ def parse_run_tensorboard(run_folder,
   def _extract_scalar_from_proto(value, step):
 
     if value.HasField('simple_value'):  # v1
-      simple_value = _read_proto_value(value, 'simple_value')
+      simple_value = _read_proto(value, 'simple_value')
       yield step, value.tag, simple_value
 
     elif value.HasField('metadata'):  # v2 eventfile
-      plugin_name = _read_proto_value(value, 'metadata.plugin_data.plugin_name')
+      plugin_name = _read_proto(value, 'metadata.plugin_data.plugin_name')
       if plugin_name == 'scalars':
-        t = _read_proto_value(value, 'tensor')
+        t = _read_proto(value, 'tensor')
         if t:
           dtype = DType(t.dtype).as_numpy_dtype
           simple_value = np.frombuffer(t.tensor_content, dtype=dtype)[0]
@@ -907,10 +908,12 @@ def get_runs_parallel(
     pbar = tqdm(total=1) if progress_bar else util.NoopTqdm()
 
     def _pbar_callback_done(run):
+      del run  # unused
       pbar.update(1)
       pbar.refresh()
 
     def _pbar_callback_error(e):
+      del e  # unused
       pbar.bar_style = 'danger'  # type: ignore
 
     futures = []
