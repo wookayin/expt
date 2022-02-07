@@ -194,6 +194,54 @@ class TestHypothesis(_TestBase):
     # test gropued, columns, mean, std, min, max, etc.
     pass
 
+  def testHypothesisInterpolate(self):
+    """Tests interpolate and subsampling when runs have different support."""
+    # yapf: disable
+    h = Hypothesis.of(name="h", runs=[
+        # represents y = 2x curve
+        Run("r0", pd.DataFrame({"x": [0, 2, 4, 6, 8],
+                                "y": [0, 4, 8, 12, 16],
+                                "z": [{}, {}, {}, {}, {}],
+                                })),
+        # represents y = 2x + 1 curve
+        Run("r1", pd.DataFrame({"x": [1, 3, 5, 7, 9],
+                                "y": [3, 7, 11, 15, 19],
+                                "z": [{}, {}, {}, {}, {}],
+                                })),
+    ])
+    # yapf: enable
+
+    # (1) Test a normal case.
+    h_interpolated = h.interpolate("x", n_samples=91)
+
+    assert h_interpolated.name == h.name
+
+    dfs_interp = h_interpolated._dataframes
+    for df_interp in dfs_interp:
+      assert df_interp.index.name == "x"
+
+    # all the dataframes should have the same length
+    assert len(dfs_interp[0]) == len(dfs_interp[1]) == 91
+    # for the first dataframe, x=[8..9] should be missing; for the second one, x=[0..1]
+    assert np.isnan(dfs_interp[0]['y'][dfs_interp[0].index > 8]).all()
+    assert np.isnan(dfs_interp[1]['y'][dfs_interp[0].index < 1]).all()
+    # non-numeric column (e.g., z) should be dropped
+    assert h_interpolated.columns == ["y"]
+    if False:  # DEBUG
+      print(list(zip(dfs_interp[0].index, dfs_interp[0]['y'])))
+
+    # validate interpolation result
+    np.testing.assert_allclose(
+        np.array(dfs_interp[0].loc[dfs_interp[0].index <= 8, 'y']),
+        np.array(dfs_interp[0].index[dfs_interp[0].index <= 8]) * 2)
+    np.testing.assert_allclose(
+        np.array(dfs_interp[1].loc[dfs_interp[1].index >= 1, 'y']),
+        np.array(dfs_interp[1].index[dfs_interp[1].index >= 1]) * 2 + 1)
+
+    # (2) Invalid use
+    with pytest.raises(ValueError, match="Unknown column"):
+      h_interpolated = h.interpolate("unknown_index", n_samples=1000)
+
 
 class TestExperiment(_TestBase):
 

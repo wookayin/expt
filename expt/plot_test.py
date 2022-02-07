@@ -226,8 +226,19 @@ class TestHypothesisPlot:
     def err_fn(h: Hypothesis) -> pd.DataFrame:
       return h.grouped.std().applymap(lambda x: 5000)
 
+    # without interpolation
     g = hypothesis.plot(x='step', y='loss', err_style='fill', err_fn=err_fn)
     assert g['loss'].collections[0].get_paths()[0].vertices[-1][1] >= 5000
+
+    # with interpolation
+    g = hypothesis.plot(
+        x='step', y='loss', err_style='fill', n_samples=100,
+        err_fn=err_fn)  # Note: err_style='fill'
+    assert g['loss'].collections[0].get_paths()[0].vertices[-1][1] >= 5000
+
+    g = hypothesis.plot(
+        x='step', y='loss', err_style='runs', n_samples=100,
+        err_fn=err_fn)  # Note: with err_style='runs', err_fn is not useful..?
 
 
 class TestExperimentPlot:

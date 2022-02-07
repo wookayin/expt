@@ -40,6 +40,7 @@ import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor
 from pandas.core.groupby.generic import DataFrameGroupBy
+from scipy import interpolate
 from typeguard import typechecked
 
 from . import plot as _plot
@@ -351,6 +352,78 @@ class Hypothesis(Iterable[Run]):
   def max(self, *args, **kwargs) -> pd.DataFrame:
     g = self.grouped
     return g.max(*args, **kwargs)  # type: ignore
+
+  def interpolate(self, x_column: Optional[str] = None, *, n_samples: int):
+    """Interpolate by uniform subsampling, and return a processed hypothesis.
+
+    This is useful when the hypothesis' individual runs may have heterogeneous
+    index (or the x-axis column).
+
+    Args:
+      x_column (Optional): the name of column to interpolate on. If None,
+        we interpolate and subsample based on the index of dataframe.
+      n_samples (int): The number of points to use when subsampling and
+        interpolation. Should be greater than 2.
+
+    Returns:
+      A copy of Hypothesis with the same name, whose runs (DataFrames) consists
+      of interpolated and resampled data for all the numeric columns. All
+      other non-numeric columns will be dropped. Each DataFramew will have
+      the specified x_column as its Index.
+    """
+    # For each dataframe (run), interpolate on x
+    if x_column is None:
+      x_series = pd.concat([pd.Series(df.index) for df in self._dataframes])
+    else:
+      if x_column not in self.columns:
+        raise ValueError(f"Unknown column: {x_column}")
+      x_series = pd.concat([df[x_column] for df in self._dataframes])
+
+    x_min = x_series.min()
+    x_max = x_series.max()
+    x_samples = np.linspace(x_min, x_max, num=n_samples)  # type: ignore
+
+    # Get interpolated dataframes.
+    dfs_interp = []
+    for df in self._dataframes:
+      df: pd.DataFrame
+      if x_column is not None:
+        df = df.set_index(x_column)  # type: ignore
+
+      # filter out non-numeric columns.
+      df = df.select_dtypes(['number'])
+
+      # yapf: disable
+      def _interpolate_if_numeric(y_series: pd.Series):
+        if y_series.dtype.kind in ('i', 'f'):
+          # y_series might contain NaN values, but interp1d does not
+          # properly deal with nan. So we filter both of x and y series.
+          idx_valid = ~np.isnan(y_series)
+          if idx_valid.sum() >= 2:
+            return interpolate.interp1d(df.index[idx_valid],
+                                        y_series[idx_valid],
+                                        bounds_error=False)(x_samples)
+          else:
+            # Insufficient data due to a empty/crashed run.
+            # Ignore the corner case! TODO: Add warning message.
+            return pd.Series(np.full_like(x_samples, np.nan, dtype=float))
+        else:
+          # maybe impossible to interpolate (i.e. object): skip it.
+          # This column will be filtered out.
+          assert False, "should have been dropped earlier"
+      # yapf: enable
+
+      df_interp = df.apply(_interpolate_if_numeric)
+      df_interp[x_column] = x_samples
+      df_interp.set_index(x_column, inplace=True)
+      dfs_interp.append(df_interp)
+
+    assert len(dfs_interp) == len(self.runs)
+    return Hypothesis(
+        name=self.name,
+        runs=[
+            Run(r.path, df_new) for (r, df_new) in zip(self.runs, dfs_interp)
+        ])
 
 
 class Experiment(Iterable[Hypothesis]):

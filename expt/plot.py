@@ -12,7 +12,6 @@ import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from pandas.core.groupby.generic import DataFrameGroupBy
-from scipy import interpolate
 
 from . import util
 
@@ -255,64 +254,6 @@ class HypothesisPlotter:
   def _dataframes(self) -> List[pd.DataFrame]:
     return self._parent._dataframes
 
-  def interpolate_and_average(
-      self,
-      df_list: List[pd.DataFrame],
-      n_samples: int,
-      x_column: Optional[str],
-  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-
-    # for each df, interpolate on 'x'
-    x_series = pd.concat([
-        (pd.Series(df.index) if x_column is None else df[x_column])
-        for df in df_list
-    ])
-    x_min = x_series.min()
-    x_max = x_series.max()
-    x_samples = np.linspace(x_min, x_max, num=n_samples)
-
-    # get interpolated dataframes
-    df_interp_list = []
-    for df in df_list:
-      df: pd.DataFrame
-      if x_column is not None:
-        df = df.set_index(x_column)
-
-      # yapf: disable
-      def _interpolate_if_numeric(y_series):
-        if y_series.dtype.kind in ('i', 'f'):
-          # y_series might contain NaN values, but interp1d does not
-          # properly deal with nan. So we filter both of x and y series.
-          idx_valid = ~np.isnan(y_series)
-          if idx_valid.sum() >= 2:
-            return interpolate.interp1d(df.index[idx_valid],
-                                        y_series[idx_valid],
-                                        bounds_error=False)(x_samples)
-          else:
-            # Insufficient data due to a empty/crashed run.
-            # Ignore the corner case! TODO: Add warning message.
-            return pd.Series(np.full_like(x_samples, np.nan, dtype=float))
-        else:
-          # maybe impossible to interpolate (i.e. object), skip it.
-          # (this column will be filtered out later on)
-          return pd.Series(np.empty_like(x_samples, dtype=object))
-      # yapf: enable
-
-      df_interp = df.apply(_interpolate_if_numeric)
-      df_interp[x_column] = x_samples
-      df_interp.set_index(x_column, inplace=True)
-      df_interp_list.append(df_interp)
-
-    # Have individual interpolation data for each run that has been cached
-    # (for the last call).
-    self._df_interp_list = df_interp_list
-
-    grouped = pd.concat(df_interp_list, sort=False).groupby(level=0)
-    mean: pd.DataFrame = grouped.mean()  # type: ignore
-    std: pd.DataFrame = grouped.std()  # type: ignore
-
-    return mean, std
-
   KNOWN_ERR_STYLES = (None, False, 'band', 'fill', 'runs', 'unit_traces')
 
   def __call__(self,
@@ -389,19 +330,22 @@ class HypothesisPlotter:
       # nothing to draw (no rows)
       raise ValueError("No data to plot, all runs have empty DataFrame.")
 
-    grouped = self.grouped
-    std = None
-    if err_fn is None:
-      err_fn = lambda h: h.grouped.std()  # standard error
+    mean, std = None, None
+    _h_interpolated = None
+
+    def _mean_and_err(h: Hypothesis):  # type: ignore
+      mean = h.grouped.mean()
+      std = err_fn(h) if err_fn else h.grouped.std()
+      return mean, std
 
     if 'x' not in kwargs:
       # index (same across runs) being x value, so we can simply average
-      mean = grouped.mean()
-      std = err_fn(self._parent)
+      mean, std = _mean_and_err(self._parent)
     else:
       # might have different x values --- we need to interpolate.
       # (i) check if the x-column is consistent?
-      if n_samples is None and np.any(grouped.nunique()[kwargs['x']] > 1):
+      if n_samples is None and np.any(
+          self._parent.grouped.nunique()[kwargs['x']] > 1):
         warnings.warn(
             f"The x value (column `{kwargs['x']}`) is not consistent "
             "over different runs. Automatically falling back to the "
@@ -410,20 +354,14 @@ class HypothesisPlotter:
             "recommended.", UserWarning)
         n_samples = 10000
       else:
-        mean = grouped.mean()
-        std = err_fn(self._parent)
+        mean, std = _mean_and_err(self._parent)
 
     if n_samples is not None:
-      if err_fn is not None:
-        raise NotImplementedError(
-            "Interpolation with different x scale is not supported when "
-            "custom err_fn is used.")
       # subsample by interpolation, then average.
-      mean, std = self.interpolate_and_average(
-          self._dataframes,
-          n_samples=n_samples,
-          x_column=kwargs.get('x', None),
-      )
+      _h_interpolated = self._parent.interpolate(
+          x_column=kwargs.get('x', None), n_samples=n_samples)
+      mean, std = _mean_and_err(_h_interpolated)
+
       # Now that the index of group-averaged dataframes are the x samples
       # we interpolated on, we can let DataFrame.plot use them as index
       if 'x' in kwargs:
@@ -485,6 +423,7 @@ class HypothesisPlotter:
         y,
         mean,
         std,
+        _h_interpolated=_h_interpolated,
         n_samples=n_samples,
         subplots=subplots,
         rolling=rolling,
@@ -517,6 +456,7 @@ class HypothesisPlotter:
       mean: pd.DataFrame,
       std: pd.DataFrame,
       *,
+      _h_interpolated: Optional[Hypothesis] = None,  # type: ignore
       n_samples: Optional[int],
       subplots: bool,
       rolling: Optional[int],
@@ -616,8 +556,10 @@ class HypothesisPlotter:
         x = kwargs.get('x', None)
         color = ax.get_lines()[-1].get_color()
 
-        df_individuals = (self._df_interp_list if n_samples \
-                          else self._dataframes)
+        if n_samples:
+          df_individuals = _h_interpolated._dataframes  # type: ignore
+        else:
+          df_individuals = self._dataframes
 
         for df in df_individuals:
           if not yi in df:
