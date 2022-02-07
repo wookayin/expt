@@ -83,6 +83,7 @@ install_requires = [
     'typeguard>=2.6.1',
     'matplotlib>=3.0.0',
     'pandas>=1.0',
+    'multiprocess>=0.70.12',
 ]
 
 tests_requires = [

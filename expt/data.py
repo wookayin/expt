@@ -26,16 +26,16 @@ of hypotheses or algorithms applied over different environments or dataset).
 import collections
 import fnmatch
 import itertools
+import multiprocessing.pool
 import os.path
 import re
 import sys
 import types
 from dataclasses import dataclass  # for python 3.6, backport needed
-from multiprocessing.pool import Pool as MultiprocessPool
-from multiprocessing.pool import ThreadPool
 from typing import (Any, Callable, Iterable, Iterator, List, Mapping,
                     MutableMapping, Optional, Sequence, Tuple, TypeVar, Union)
 
+import multiprocess.pool
 import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor
@@ -430,6 +430,8 @@ class Hypothesis(Iterable[Run]):
 
 
 class Experiment(Iterable[Hypothesis]):
+  """An Experiment is a collection of Hypotheses, structured with
+  hierarchical MultiIndex."""
 
   @typechecked
   def __init__(
@@ -974,19 +976,22 @@ def get_runs_parallel(
     verbose=False,
     n_jobs=8,
     fillna=True,
-    pool_class=MultiprocessPool,
+    pool_class=multiprocess.pool.Pool,
     progress_bar=True,
     run_postprocess_fn=None,
 ) -> RunList:
-  """Get a list of Run objects from the given path(s).
+  """Get a list of Run objects from the given path glob patterns.
 
-    Runs in parallel.
-    """
+  This runs in parallel, using the multiprocess library (a fork of python
+  standard library multiprocessing) which is more friendly with ipython
+  and serializing non-picklable objects.
+  """
 
   if isinstance(pool_class, str):
     Pool = {
-        'threading': ThreadPool,
-        'multiprocessing': MultiprocessPool,
+        'threading': multiprocess.pool.ThreadPool,
+        'multiprocess': multiprocess.pool.Pool,  # third-party (works better)
+        'multiprocessing': multiprocessing.pool.Pool,  # python stdlib
     }.get(pool_class, None)
     if not Pool:
       raise ValueError("Unknown pool_class: {} ".format(pool_class) +
