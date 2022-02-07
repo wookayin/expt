@@ -85,7 +85,7 @@ class Run:
     return run
 
   def __repr__(self):
-    return 'Run({path!r}, df with {rows} rows)'.format(
+    return 'Run({path!r}, DataFrame with {rows} rows)'.format(
         path=self.path, rows=len(self.df))
 
   @property
@@ -280,8 +280,11 @@ class Hypothesis(Iterable[Run]):
 
     return pd.DataFrame({r.path: r.df[k] for r in self.runs})
 
-  def __repr__(self) -> str:
-    return f"Hypothesis({self.name!r}, <{len(self.runs)} runs>)"
+  def __repr__(self, indent='') -> str:
+    return (f"Hypothesis({self.name!r}, {len(self.runs)} runs: [\n" +
+            (indent + " ") +
+            (',\n' + indent + " ").join([repr(run) for run in self.runs]) +
+            ",\n" + indent + "])")
 
   def __len__(self) -> int:
     return len(self.runs)
@@ -596,7 +599,8 @@ class Experiment(Iterable[Hypothesis]):
   def __repr__(self) -> str:
     return (
         f"Experiment('{self.name}', {len(self._hypotheses)} hypotheses: [\n " +
-        '\n '.join([repr(exp) for exp in self.hypotheses]) + "\n])")
+        ',\n '.join([h.__repr__(indent=' ') for h in self.hypotheses]) +
+        ",\n])")
 
   def __getitem__(
       self,
@@ -707,6 +711,7 @@ class Experiment(Iterable[Hypothesis]):
     for column in columns:
 
       def df_series(df: pd.DataFrame):
+        # TODO: What if a named column is used as an index?
         if column == 'index':
           return df.index
         if column not in df:
