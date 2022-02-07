@@ -219,6 +219,16 @@ class TestHypothesisPlot:
 
     # TODO: what if some runs are truncated?
 
+  def testCustomErrFn(self):
+    """Tests plot(err_fn=...)"""
+    hypothesis = self._fixture()
+
+    def err_fn(h: Hypothesis) -> pd.DataFrame:
+      return h.grouped.std().applymap(lambda x: 5000)
+
+    g = hypothesis.plot(x='step', y='loss', err_style='fill', err_fn=err_fn)
+    assert g['loss'].collections[0].get_paths()[0].vertices[-1][1] >= 5000
+
 
 class TestExperimentPlot:
 

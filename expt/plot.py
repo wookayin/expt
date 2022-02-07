@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from pandas.core.groupby.generic import DataFrameGroupBy
 from scipy import interpolate
 
 from . import util
@@ -247,7 +248,7 @@ class HypothesisPlotter:
     return self._parent.runs
 
   @property
-  def grouped(self):
+  def grouped(self) -> DataFrameGroupBy:
     return self._parent.grouped
 
   @property
@@ -318,6 +319,7 @@ class HypothesisPlotter:
                *args,
                subplots=True,
                err_style="runs",
+               err_fn: Optional[Callable[[Hypothesis], pd.DataFrame]] = None,
                std_alpha=0.2,
                runs_alpha=0.2,
                n_samples=None,
@@ -357,6 +359,12 @@ class HypothesisPlotter:
             (i) runs, unit_traces: Show individual runs/traces (see runs_alpha)
             (ii) band, fill: Show as shaded area (see std_alpha)
             (iii) None or False: do not display any errors
+      - err_fn (Callable: Hypothesis -> pd.DataFrame):
+          A strategy to compute the standard error or deviation. This should
+          return the standard err results as a DataFrame, having the same
+          column and index as the hypothesis.
+          Defaults to "standard deviation.", i.e. `hypothoses.grouped.std()`.
+          To use standard error, use `err_fn=lambda h: h.grouped.sem()`.
       - std_alpha (float): If not None, will show the 1-std range as a
           shaded area. Defaults 0.2,
       - runs_alpha (float): If not None, will draw an individual line
@@ -382,10 +390,14 @@ class HypothesisPlotter:
       raise ValueError("No data to plot, all runs have empty DataFrame.")
 
     grouped = self.grouped
+    std = None
+    if err_fn is None:
+      err_fn = lambda h: h.grouped.std()  # standard error
 
     if 'x' not in kwargs:
       # index (same across runs) being x value, so we can simply average
-      mean, std = grouped.mean(), grouped.std()
+      mean = grouped.mean()
+      std = err_fn(self._parent)
     else:
       # might have different x values --- we need to interpolate.
       # (i) check if the x-column is consistent?
@@ -398,9 +410,14 @@ class HypothesisPlotter:
             "recommended.", UserWarning)
         n_samples = 10000
       else:
-        mean, std = grouped.mean(), grouped.std()
+        mean = grouped.mean()
+        std = err_fn(self._parent)
 
     if n_samples is not None:
+      if err_fn is not None:
+        raise NotImplementedError(
+            "Interpolation with different x scale is not supported when "
+            "custom err_fn is used.")
       # subsample by interpolation, then average.
       mean, std = self.interpolate_and_average(
           self._dataframes,
@@ -411,6 +428,9 @@ class HypothesisPlotter:
       # we interpolated on, we can let DataFrame.plot use them as index
       if 'x' in kwargs:
         del kwargs['x']
+
+    if not isinstance(std, pd.DataFrame):
+      raise TypeError(f"err_fn should return a pd.DataFrame, got {type(std)}")
 
     # there might be many NaN values if each column is being logged
     # at a different period. We fill in the missing values.
