@@ -727,6 +727,20 @@ class Experiment(Iterable[Hypothesis]):
       df[column] = [aggregate_h(df_series(hm)) for hm in hypo_means]
     return df
 
+  def interpolate(self, x_column: Optional[str] = None, *, n_samples: int):
+    """Apply interpolation to each of the hypothesis, and return a copy
+    of new Experiment (and its children Hypothesis/Run) object.
+
+    See: Hypothesis.interpolate().
+    """
+    return Experiment(
+        name=self.name,
+        hypotheses=[
+            h.interpolate(x_column, n_samples=n_samples)
+            for h in self.hypotheses
+        ],
+    )
+
   def hvplot(self, *args, **kwargs):
     plot = None
     for i, (name, hypo) in enumerate(self._hypotheses.items()):
