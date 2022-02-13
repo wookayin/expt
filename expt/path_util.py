@@ -9,6 +9,7 @@ import subprocess
 import sys
 from distutils.spawn import find_executable
 from glob import glob as local_glob
+from pathlib import Path
 from typing import List
 
 # Options for gsutil. By default, gsutil is disabled as tf.io.gfile is
@@ -29,6 +30,13 @@ def _import_gfile():
   raise RuntimeError("To be able to read GCP path (gs://...), "
                      "tensorflow should be installed. "
                      "(Cannot import tensorflow.io.gfile)")
+
+
+def _to_path_string(path) -> str:
+  if isinstance(path, Path):
+    return str(path)
+  else:
+    return path
 
 
 class GsCommandException(RuntimeError):
@@ -80,6 +88,8 @@ def glob(pattern):
   It supports local file path (i.e., glob.glob) and Google Cloud Storage
   (i.e., gs://...) path via gfile.glob(...).
   """
+  pattern = _to_path_string(pattern)
+
   if pattern.startswith('gs://'):
     # Bug: GCP glob does not match any directory on trailing slashes.
     # https://github.com/GoogleCloudPlatform/gsutil/issues/444
@@ -116,6 +126,8 @@ def exists(path) -> bool:
   """Similar to os.path.exists(path), but supports both local path and
   remote path (Google Cloud Storage, gs://...) via gfile.exists(...).
   """
+  path = _to_path_string(path)
+
   if path.startswith('gs://'):
     if USE_GSUTIL:
       try:
@@ -134,6 +146,8 @@ def isdir(path):
   """Similar to os.path.isdir(path), but supports both local path and
   remote path (Google Cloud Storage, gs://...) via gfile.isdir(...).
   """
+  path = _to_path_string(path)
+
   if path.startswith('gs://'):
     # Bug: GCP glob does not match any directory on trailing slashes.
     # https://github.com/GoogleCloudPlatform/gsutil/issues/444
@@ -147,6 +161,8 @@ def open(path, *, mode='r'):
   """Similar to built-in open(...), but supports Google Cloud Storage
   (i.e., gs://...) path via gfile.GFile(...) as well as local path.
   """
+  path = _to_path_string(path)
+
   if path.startswith('gs://'):
     return _import_gfile().GFile(path, mode=mode)  # noqa
   else:
