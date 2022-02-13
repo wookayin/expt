@@ -160,6 +160,24 @@ class TestRunList(_TestBase):
     assert list(df['env_id'].unique()) == ["halfcheetah", "hopper", "humanoid"]  # yapf: disable
     assert list(df['seed'].unique()) == ['0', '1']
 
+  def testToDataFrame(self, runs_gridsearch: RunList):
+    runs = runs_gridsearch
+
+    def _config_fn(run: Run):
+      algorithm, env, seed = run.name.split('-')
+      return dict(algorithm=algorithm, env=env, seed=seed)
+
+    df = runs.to_dataframe(config_fn=_config_fn)
+
+    # validate df
+    print(df)
+    assert 'algorithm' in df.columns
+    assert 'env' in df.columns
+    assert 'seed' in df.columns
+
+    np.testing.assert_array_equal(df['name'], [r.name for r in runs])
+    np.testing.assert_array_equal(df['run'], list(runs))
+
 
 class TestHypothesis(_TestBase):
 

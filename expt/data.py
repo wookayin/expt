@@ -32,7 +32,7 @@ import re
 import sys
 import types
 from dataclasses import dataclass  # for python 3.6, backport needed
-from typing import (Any, Callable, Iterable, Iterator, List, Mapping,
+from typing import (Any, Callable, Dict, Iterable, Iterator, List, Mapping,
                     MutableMapping, Optional, Sequence, Tuple, TypeVar, Union)
 
 import multiprocess.pool
@@ -162,12 +162,34 @@ class RunList(Sequence[Run]):
     """Create a new copy of list containing all the runs."""
     return list(self._runs)
 
-  def to_dataframe(self) -> pd.DataFrame:
-    """Return a DataFrame consisting of columns `name` and `run`."""
-    return pd.DataFrame({
+  def to_dataframe(self, config_fn=None) -> pd.DataFrame:
+    """Return a DataFrame of runs, with of columns `name` and `run`
+    (plus some extra columns as per config_fn).
+
+    Args:
+      config_fn: If given, this should be a function that takes a Run
+        and returns Dict[str, number]. Additional series will be added
+        to the dataframe from the result of this function.
+    """
+    df = pd.DataFrame({
         'name': [r.name for r in self._runs],
         'run': self._runs,
     })
+
+    if config_fn:
+      for i, run in enumerate(self._runs):
+        config: Mapping[str, Any] = config_fn(run)
+        if not isinstance(config, Mapping):
+          raise ValueError("config_fn should return a dict-like object.")
+        for k, v in config.items():
+          dtype = np.array(v).dtype
+          if k not in df:
+            df[k] = None  # create a new column if not exists
+          df.loc[i, k] = v
+
+    # Put 'run' in the rightmost column.
+    df.insert(len(df.columns) - 1, 'run', df.pop('run'))
+    return df
 
   def filter(self, fn: Union[Callable[[Run], bool], str]) -> 'RunList':
     """Apply a filter function (Run -> bool) and return the filtered runs
