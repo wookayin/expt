@@ -39,7 +39,9 @@ class LogParser:
 
   @abc.abstractmethod
   def parse(self) -> pd.DataFrame:
-    """Return the log data read as a DataFrame."""
+    """Return the log data read as a DataFrame.
+
+    Must have called read() before."""
 
   def __repr__(self):
     return f"<{type(self).__name__}, log_dir={self._log_dir}>"
@@ -141,9 +143,15 @@ class TensorboardLogParser(LogParser):
       raise FileNotFoundError(f"No event file detected in {self._log_dir}")
 
     # Initialize the internal data structure.
+    # TODO: This stores all the data into memory. It is okay for the parser
+    # to be "stateful", when a worker process instantiates a new parser object
+    # and discard all the intermediate data when reading is complete; however,
+    # incremental loading will be difficult when it comes to multiprocessing
+    # because the data has to be copied or shared across different process,
+    # and the memory footprint can unexpectedly grow to a potential leak.
+    # Also, TF-internal summary iterator might not be pickleable or fork-safe.
     # int(timestep) -> dict: {columns -> ...}
     self._all_data: Dict[int, Dict[str, Any]] = defaultdict(dict)
-    self.read()
 
   def _extract_scalar_from_proto(self, value, step):
     from tensorflow.python.framework.dtypes import DType
