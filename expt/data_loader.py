@@ -12,8 +12,6 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 import multiprocess.pool
 import numpy as np
 import pandas as pd
-from tensorflow.core.util import event_pb2
-from tensorflow.python.framework.dtypes import DType
 
 from . import path_util, util
 from .data import Experiment, Hypothesis, Run, RunList
@@ -149,6 +147,7 @@ class TensorboardLogParser(LogParser):
     self.read()
 
   def _extract_scalar_from_proto(self, value, step):
+    from tensorflow.python.framework.dtypes import DType
 
     def _read_proto(node, path: str):
       for p in path.split('.'):
@@ -171,6 +170,8 @@ class TensorboardLogParser(LogParser):
           yield step, value.tag, simple_value
 
   def _iter_scalar_summary_from_event_file(self, event_file):
+    from tensorflow.core.util import event_pb2
+
     try:
       # avoid DeprecationWarning on tf_record_iterator
       # pyright: reportMissingImports=false
