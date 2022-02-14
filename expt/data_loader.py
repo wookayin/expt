@@ -1,7 +1,7 @@
 """Data Loader for expt."""
 
 import abc
-import multiprocessing
+import multiprocessing.pool
 import os
 import sys
 import warnings
@@ -39,17 +39,17 @@ class LogParser:
 
   @abc.abstractmethod
   def parse(self) -> pd.DataFrame:
-    """"""
+    """Return the log data read as a DataFrame."""
 
   def __repr__(self):
     return f"<{type(self).__name__}, log_dir={self._log_dir}>"
 
 
-def parse_run(run_folder, fillna=False, verbose=False) -> pd.DataFrame:
+def parse_run(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
   """Create a pd.DataFrame object from a single directory."""
   if verbose:
     # TODO Use python logging
-    print(f"Reading {run_folder} ...", file=sys.stderr, flush=True)
+    print(f"Reading {log_dir} ...", file=sys.stderr, flush=True)
 
   # make it more general (rather than being specific to progress.csv)
   # and support tensorboard eventlog files, etc.
@@ -60,7 +60,7 @@ def parse_run(run_folder, fillna=False, verbose=False) -> pd.DataFrame:
 
   for fn in sources:
     try:
-      df = fn(run_folder, fillna=fillna, verbose=verbose)
+      df = fn(log_dir, fillna=fillna, verbose=verbose)
       if df is not None:
         break
     except (FileNotFoundError, IOError) as e:
@@ -68,18 +68,12 @@ def parse_run(run_folder, fillna=False, verbose=False) -> pd.DataFrame:
         print(f"{fn.__name__} -> {e}\n", file=sys.stderr, flush=True)
   else:
     raise pd.errors.EmptyDataError(  # type: ignore
-        f"Cannot handle dir: {run_folder}")
+        f"Cannot handle dir: {log_dir}")
 
   # add some optional metadata... (might not be preserved afterwards)
   if df is not None:
-    df.path = run_folder
+    df.path = log_dir
   return df
-
-
-def parse_run_progresscsv(run_folder,
-                          fillna=False,
-                          verbose=False) -> pd.DataFrame:
-  return CSVLogParser(run_folder).read(verbose=verbose).parse(fillna=fillna)
 
 
 class CSVLogParser(LogParser):
@@ -87,9 +81,9 @@ class CSVLogParser(LogParser):
 
   def __init__(self, log_dir):
     super().__init__(log_dir=log_dir)
-    self._df = pd.DataFrame()
+    self._df = None
 
-  def read(self, verbose=False):
+    # Find the target CSV file.
     # Try progress.csv or log.csv from folder
     detected_csv = None
     for fname in ('progress.csv', 'log.csv'):
@@ -107,13 +101,16 @@ class CSVLogParser(LogParser):
     if detected_csv is None:
       raise FileNotFoundError(os.path.join(self._log_dir, "*.csv"))
 
+    self._csv_path = detected_csv
+
+  def read(self, verbose=False):
     # Read the detected file `p`
     if verbose:
-      print(f"parse_run (csv): Reading {detected_csv}",
+      print(f"parse_run (csv): Reading {self._csv_path}",
             file=sys.stderr, flush=True)  # yapf: disable
 
     df: pd.DataFrame
-    with open(detected_csv, mode='r', encoding='utf-8') as f:
+    with open(self._csv_path, mode='r', encoding='utf-8') as f:
       df = pd.read_csv(f)  # type: ignore
 
     self._df = df
@@ -121,6 +118,9 @@ class CSVLogParser(LogParser):
 
   def parse(self, fillna=False) -> pd.DataFrame:
     df = self._df
+    if df is None:
+      raise pd.errors.EmptyDataError(  # type: ignore
+          f"No rows found in {self._csv_path}")
     if fillna:
       df = df.fillna(0)
     return df
@@ -138,8 +138,7 @@ class TensorboardLogParser(LogParser):
     # TODO: When a new event file is added?
     self._event_files = list(sorted(path_util.glob(event_glob)))
     if not self._event_files:  # no event file detected
-      raise pd.errors.EmptyDataError(  # type: ignore
-          f"No event file detected in {self._log_dir}")
+      raise FileNotFoundError(f"No event file detected in {self._log_dir}")
 
     # Initialize the internal data structure.
     # int(timestep) -> dict: {columns -> ...}
@@ -213,11 +212,30 @@ class TensorboardLogParser(LogParser):
     return df
 
 
-def parse_run_tensorboard(run_folder,
-                          fillna=False,
-                          verbose=False) -> pd.DataFrame:
+def parse_run_progresscsv(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
+  return CSVLogParser(log_dir).read(verbose=verbose).parse(fillna=fillna)
+
+
+def parse_run_tensorboard(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
   """Create a pandas DataFrame from tensorboard eventfile or run directory."""
-  return TensorboardLogParser(run_folder).read(verbose=verbose).parse()
+  return TensorboardLogParser(log_dir).read(verbose=verbose).parse()
+
+
+def _get_parser_for(log_dir):
+  for parser_cls in (
+      CSVLogParser,
+      TensorboardLogParser,
+  ):
+    try:
+      parser = parser_cls(log_dir)
+      return parser
+    except (FileNotFoundError, IOError):
+      # When log_dir is not supported by the parser,
+      # an expected exception is thrown. Try the next one.
+      pass
+
+  # TODO: Use some appropriate exception type.
+  raise FileNotFoundError(f"Cannot read {log_dir} using known log parsers.")
 
 
 #########################################################################

@@ -34,7 +34,6 @@ class TestGetRuns:
 
   def test_parse_tensorboard(self):
     r = data_loader.parse_run(Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2")
-    print(r)
 
     assert len(r) >= 400
     np.testing.assert_array_equal(
@@ -42,7 +41,6 @@ class TestGetRuns:
 
   def test_parse_progresscsv(self):
     r = data_loader.parse_run(Path(FIXTURE_PATH) / "sample_csv")
-    print(r)
 
     assert len(r) >= 50
     np.testing.assert_array_equal(r.columns, [
@@ -51,6 +49,25 @@ class TestGetRuns:
         'episode_lengths',
         'episode_end_times',
     ])
+
+  def test_parse_cannot_handle(self):
+    # incompatible logdir format and parser
+    with pytest.raises(FileNotFoundError):
+      data_loader.CSVLogParser(Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2")
+    with pytest.raises(FileNotFoundError):
+      data_loader.TensorboardLogParser(Path(FIXTURE_PATH) / "sample_csv")
+
+  def test_parser_detection(self):
+
+    log_dir = Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2"
+    p = data_loader._get_parser_for(log_dir)
+    assert isinstance(p, data_loader.TensorboardLogParser)
+    assert p._log_dir == log_dir
+
+    log_dir = Path(FIXTURE_PATH) / "sample_csv"
+    p = data_loader._get_parser_for(log_dir)
+    assert isinstance(p, data_loader.CSVLogParser)
+    assert p._log_dir == log_dir
 
 
 if __name__ == '__main__':
