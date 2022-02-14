@@ -3,6 +3,8 @@
 import multiprocessing
 import os
 import sys
+import warnings
+from collections import defaultdict
 from typing import Iterator, Optional
 
 import multiprocess.pool
@@ -89,17 +91,11 @@ def parse_run_tensorboard(run_folder,
                           verbose=False) -> pd.DataFrame:
   """Create a pandas DataFrame from tensorboard eventfile or run directory."""
   event_glob = os.path.join(run_folder, '*events.out.tfevents.*')
-  event_file = list(sorted(path_util.glob(event_glob)))
+  event_files = list(sorted(path_util.glob(event_glob)))
 
-  if not event_file:  # no event file detected
+  if not event_files:  # no event file detected
     raise pd.errors.EmptyDataError(  # type: ignore
         f"No event file detected in {run_folder}")
-  event_file = event_file[-1]  # pick the last one
-  if verbose:
-    print(f"parse_run (tfevents) : Reading {event_file} ...",
-          file=sys.stderr, flush=True)  # yapf: disable
-
-  from collections import defaultdict
 
   from tensorflow.core.util import event_pb2
   from tensorflow.python.framework.dtypes import DType
@@ -146,8 +142,14 @@ def parse_run_tensorboard(run_folder,
 
   # int(timestep) -> dict of columns
   all_data = defaultdict(dict)  # type: ignore
-  for step, tag_name, value in iter_scalar_summary_from_event_file(event_file):
-    all_data[step][tag_name] = value
+  for event_file in event_files:
+    if verbose:
+      print(f"parse_run (tfevents) : Reading {event_files} ...",
+            file=sys.stderr, flush=True)  # yapf: disable
+
+    for step, tag_name, value in iter_scalar_summary_from_event_file(
+        event_file):
+      all_data[step][tag_name] = value
 
   for t in list(all_data.keys()):
     all_data[t]['global_step'] = t
