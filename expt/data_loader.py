@@ -1,6 +1,8 @@
 """Data Loader for expt."""
 
 import abc
+import functools
+import itertools
 import multiprocessing.pool
 import os
 import sys
@@ -22,29 +24,33 @@ except ImportError:
   tqdm = util.NoopTqdm
 
 #########################################################################
-# Individual Run Parsers
+# Individual Run Reader
 #########################################################################
 
 
-class LogParser:
-  """Interface for log parsing."""
+class LogReader:
+  """Interface for reading logs."""
 
   def __init__(self, log_dir):
     self._log_dir = log_dir
 
+  @property
+  def log_dir(self) -> str:
+    return self._log_dir
+
   @abc.abstractmethod
-  def read(self, verbose=False) -> 'LogParser':
-    """Load or reload the data from the directory."""
+  def read(self, verbose=False):
+    """Load the remaning portion (or all) of the data, and return it."""
     return self
 
   @abc.abstractmethod
   def parse(self) -> pd.DataFrame:
-    """Return the log data read as a DataFrame.
+    """Return the whole log data read so far as a DataFrame.
 
     Must have called read() before."""
 
   def __repr__(self):
-    return f"<{type(self).__name__}, log_dir={self._log_dir}>"
+    return f"<{type(self).__name__}, log_dir={self.log_dir}>"
 
 
 def parse_run(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
@@ -78,7 +84,7 @@ def parse_run(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
   return df
 
 
-class CSVLogParser(LogParser):
+class CSVLogReader(LogReader):
   """Parse log data from progress.csv per convention."""
 
   def __init__(self, log_dir):
@@ -89,19 +95,19 @@ class CSVLogParser(LogParser):
     # Try progress.csv or log.csv from folder
     detected_csv = None
     for fname in ('progress.csv', 'log.csv'):
-      p = os.path.join(self._log_dir, fname)
+      p = os.path.join(self.log_dir, fname)
       if path_util.exists(p):
         detected_csv = p
         break
 
     # maybe a direct file path is given instead of directory
     if detected_csv is None:
-      f = self._log_dir
+      f = self.log_dir
       if path_util.exists(f) and not path_util.isdir(f):
         detected_csv = f
 
     if detected_csv is None:
-      raise FileNotFoundError(os.path.join(self._log_dir, "*.csv"))
+      raise FileNotFoundError(os.path.join(self.log_dir, "*.csv"))
 
     self._csv_path = detected_csv
 
@@ -121,15 +127,14 @@ class CSVLogParser(LogParser):
   def parse(self, fillna=False) -> pd.DataFrame:
     df = self._df
     if df is None:
-      raise pd.errors.EmptyDataError(  # type: ignore
-          f"No rows found in {self._csv_path}")
+      raise RuntimeError("read() was not called.")
     if fillna:
       df = df.fillna(0)
     return df
 
 
-class TensorboardLogParser(LogParser):
-  """Log parser for tensorboard run directory."""
+class TensorboardLogReader(LogReader):
+  """Log reader for tensorboard run directory."""
 
   def __init__(self, log_dir):
     super().__init__(log_dir=log_dir)
@@ -140,11 +145,11 @@ class TensorboardLogParser(LogParser):
     # TODO: When a new event file is added?
     self._event_files = list(sorted(path_util.glob(event_glob)))
     if not self._event_files:  # no event file detected
-      raise FileNotFoundError(f"No event file detected in {self._log_dir}")
+      raise FileNotFoundError(f"No event file detected in {self.log_dir}")
 
     # Initialize the internal data structure.
-    # TODO: This stores all the data into memory. It is okay for the parser
-    # to be "stateful", when a worker process instantiates a new parser object
+    # TODO: This stores all the data into memory. It is okay for the reader
+    # to be "stateful", when a worker process instantiates a new reader object
     # and discard all the intermediate data when reading is complete; however,
     # incremental loading will be difficult when it comes to multiprocessing
     # because the data has to be copied or shared across different process,
@@ -197,7 +202,7 @@ class TensorboardLogParser(LogParser):
       for value in event.summary.value:
         yield from self._extract_scalar_from_proto(value, step=step)
 
-  def read(self, verbose=False) -> 'TensorboardLogParser':
+  def read(self, verbose=False) -> 'TensorboardLogReader':
     for event_file in self._event_files:
       if verbose:
         print(f"parse_run (tfevents) : Reading {event_file} ...",
@@ -221,29 +226,29 @@ class TensorboardLogParser(LogParser):
 
 
 def parse_run_progresscsv(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
-  return CSVLogParser(log_dir).read(verbose=verbose).parse(fillna=fillna)
+  return CSVLogReader(log_dir).read(verbose=verbose).parse(fillna=fillna)
 
 
 def parse_run_tensorboard(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
   """Create a pandas DataFrame from tensorboard eventfile or run directory."""
-  return TensorboardLogParser(log_dir).read(verbose=verbose).parse()
+  return TensorboardLogReader(log_dir).read(verbose=verbose).parse()
 
 
-def _get_parser_for(log_dir):
-  for parser_cls in (
-      CSVLogParser,
-      TensorboardLogParser,
+def _get_reader_for(log_dir):
+  for reader_cls in (
+      CSVLogReader,
+      TensorboardLogReader,
   ):
     try:
-      parser = parser_cls(log_dir)
-      return parser
+      reader = reader_cls(log_dir)
+      return reader
     except (FileNotFoundError, IOError):
-      # When log_dir is not supported by the parser,
+      # When log_dir is not supported by the reader,
       # an expected exception is thrown. Try the next one.
       pass
 
   # TODO: Use some appropriate exception type.
-  raise FileNotFoundError(f"Cannot read {log_dir} using known log parsers.")
+  raise FileNotFoundError(f"Cannot read {log_dir} using known log readers.")
 
 
 #########################################################################

@@ -53,20 +53,20 @@ class TestGetRuns:
   def test_parse_cannot_handle(self):
     # incompatible logdir format and parser
     with pytest.raises(FileNotFoundError):
-      data_loader.CSVLogParser(Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2")
+      data_loader.CSVLogReader(Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2")
     with pytest.raises(FileNotFoundError):
-      data_loader.TensorboardLogParser(Path(FIXTURE_PATH) / "sample_csv")
+      data_loader.TensorboardLogReader(Path(FIXTURE_PATH) / "sample_csv")
 
   def test_parser_detection(self):
 
     log_dir = Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2"
-    p = data_loader._get_parser_for(log_dir)
-    assert isinstance(p, data_loader.TensorboardLogParser)
+    p = data_loader._get_reader_for(log_dir)
+    assert isinstance(p, data_loader.TensorboardLogReader)
     assert p._log_dir == log_dir
 
     log_dir = Path(FIXTURE_PATH) / "sample_csv"
-    p = data_loader._get_parser_for(log_dir)
-    assert isinstance(p, data_loader.CSVLogParser)
+    p = data_loader._get_reader_for(log_dir)
+    assert isinstance(p, data_loader.CSVLogReader)
     assert p._log_dir == log_dir
 
 
