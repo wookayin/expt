@@ -1,15 +1,19 @@
 """Data Loader for expt."""
 
+import abc
 import multiprocessing
 import os
 import sys
 import warnings
 from collections import defaultdict
-from typing import Iterator, Optional
+from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import multiprocess.pool
 import numpy as np
 import pandas as pd
+from tensorflow.core.util import event_pb2
+from tensorflow.python.framework.dtypes import DType
 
 from . import path_util, util
 from .data import Experiment, Hypothesis, Run, RunList
@@ -18,6 +22,29 @@ try:
   from tqdm.auto import tqdm
 except ImportError:
   tqdm = util.NoopTqdm
+
+#########################################################################
+# Individual Run Parsers
+#########################################################################
+
+
+class LogParser:
+  """Interface for log parsing."""
+
+  def __init__(self, log_dir):
+    self._log_dir = log_dir
+
+  @abc.abstractmethod
+  def read(self, verbose=False) -> 'LogParser':
+    """Load or reload the data from the directory."""
+    return self
+
+  @abc.abstractmethod
+  def parse(self) -> pd.DataFrame:
+    """"""
+
+  def __repr__(self):
+    return f"<{type(self).__name__}, log_dir={self._log_dir}>"
 
 
 def parse_run(run_folder, fillna=False, verbose=False) -> pd.DataFrame:
@@ -54,70 +81,81 @@ def parse_run(run_folder, fillna=False, verbose=False) -> pd.DataFrame:
 def parse_run_progresscsv(run_folder,
                           fillna=False,
                           verbose=False) -> pd.DataFrame:
-  """Create a pandas DataFrame object from progress.csv per convention."""
-  # Try progress.csv or log.csv from folder
-  detected_csv = None
-  for fname in ('progress.csv', 'log.csv'):
-    p = os.path.join(run_folder, fname)
-    if path_util.exists(p):
-      detected_csv = p
-      break
-
-  # maybe a direct file path is given instead of directory
-  if detected_csv is None:
-    if path_util.exists(run_folder) and not path_util.isdir(run_folder):
-      detected_csv = run_folder
-
-  if detected_csv is None:
-    raise FileNotFoundError(os.path.join(run_folder, "*.csv"))
-
-  # Read the detected file `p`
-  if verbose:
-    print(f"parse_run (csv): Reading {detected_csv}",
-          file=sys.stderr, flush=True)  # yapf: disable
-
-  df: pd.DataFrame
-  with open(detected_csv, mode='r', encoding='utf-8') as f:
-    df = pd.read_csv(f)  # type: ignore
-
-  if fillna:
-    df = df.fillna(0)
-
-  return df
+  return CSVLogParser(run_folder).read(verbose=verbose).parse(fillna=fillna)
 
 
-def parse_run_tensorboard(run_folder,
-                          fillna=False,
-                          verbose=False) -> pd.DataFrame:
-  """Create a pandas DataFrame from tensorboard eventfile or run directory."""
-  event_glob = os.path.join(run_folder, '*events.out.tfevents.*')
-  event_files = list(sorted(path_util.glob(event_glob)))
+class CSVLogParser(LogParser):
+  """Parse log data from progress.csv per convention."""
 
-  if not event_files:  # no event file detected
-    raise pd.errors.EmptyDataError(  # type: ignore
-        f"No event file detected in {run_folder}")
+  def __init__(self, log_dir):
+    super().__init__(log_dir=log_dir)
+    self._df = pd.DataFrame()
 
-  from tensorflow.core.util import event_pb2
-  from tensorflow.python.framework.dtypes import DType
-  try:
-    # avoid DeprecationWarning on tf_record_iterator
-    # pyright: reportMissingImports=false
-    from tensorflow.python._pywrap_record_io import RecordIterator
+  def read(self, verbose=False):
+    # Try progress.csv or log.csv from folder
+    detected_csv = None
+    for fname in ('progress.csv', 'log.csv'):
+      p = os.path.join(self._log_dir, fname)
+      if path_util.exists(p):
+        detected_csv = p
+        break
 
-    def summary_iterator(path):
-      for r in RecordIterator(path, ""):
-        yield event_pb2.Event.FromString(r)  # type: ignore
-  except Exception:
-    from tensorflow.python.summary.summary_iterator import summary_iterator
+    # maybe a direct file path is given instead of directory
+    if detected_csv is None:
+      f = self._log_dir
+      if path_util.exists(f) and not path_util.isdir(f):
+        detected_csv = f
 
-  def _read_proto(node, path: str):
-    for p in path.split('.'):
-      node = getattr(node, p, None)
-      if node is None:
-        return None
-    return node
+    if detected_csv is None:
+      raise FileNotFoundError(os.path.join(self._log_dir, "*.csv"))
 
-  def _extract_scalar_from_proto(value, step):
+    # Read the detected file `p`
+    if verbose:
+      print(f"parse_run (csv): Reading {detected_csv}",
+            file=sys.stderr, flush=True)  # yapf: disable
+
+    df: pd.DataFrame
+    with open(detected_csv, mode='r', encoding='utf-8') as f:
+      df = pd.read_csv(f)  # type: ignore
+
+    self._df = df
+    return self
+
+  def parse(self, fillna=False) -> pd.DataFrame:
+    df = self._df
+    if fillna:
+      df = df.fillna(0)
+    return df
+
+
+class TensorboardLogParser(LogParser):
+  """Log parser for tensorboard run directory."""
+
+  def __init__(self, log_dir):
+    super().__init__(log_dir=log_dir)
+
+    # Initialize the resources.
+    event_glob = os.path.join(log_dir, '*events.out.tfevents.*')
+
+    # TODO: When a new event file is added?
+    self._event_files = list(sorted(path_util.glob(event_glob)))
+    if not self._event_files:  # no event file detected
+      raise pd.errors.EmptyDataError(  # type: ignore
+          f"No event file detected in {self._log_dir}")
+
+    # Initialize the internal data structure.
+    # int(timestep) -> dict: {columns -> ...}
+    self._all_data: Dict[int, Dict[str, Any]] = defaultdict(dict)
+    self.read()
+
+  def _extract_scalar_from_proto(self, value, step):
+
+    def _read_proto(node, path: str):
+      for p in path.split('.'):
+        node = getattr(node, p, None)
+        if node is None:
+          return None
+      return node
 
     if value.HasField('simple_value'):  # v1
       simple_value = _read_proto(value, 'simple_value')
@@ -132,33 +170,58 @@ def parse_run_tensorboard(run_folder,
           simple_value = np.frombuffer(t.tensor_content, dtype=dtype)[0]
           yield step, value.tag, simple_value
 
-  def iter_scalar_summary_from_event_file(event_file):
+  def _iter_scalar_summary_from_event_file(self, event_file):
+    try:
+      # avoid DeprecationWarning on tf_record_iterator
+      # pyright: reportMissingImports=false
+      from tensorflow.python._pywrap_record_io import RecordIterator
+
+      def summary_iterator(path):
+        for r in RecordIterator(path, ""):
+          yield event_pb2.Event.FromString(r)  # type: ignore
+    except Exception:
+      from tensorflow.python.summary.summary_iterator import summary_iterator
+
     for event in summary_iterator(event_file):
       step = int(event.step)
       if not event.HasField('summary'):
         continue
       for value in event.summary.value:
-        yield from _extract_scalar_from_proto(value, step=step)
+        yield from self._extract_scalar_from_proto(value, step=step)
 
-  # int(timestep) -> dict of columns
-  all_data = defaultdict(dict)  # type: ignore
-  for event_file in event_files:
-    if verbose:
-      print(f"parse_run (tfevents) : Reading {event_files} ...",
-            file=sys.stderr, flush=True)  # yapf: disable
+  def read(self, verbose=False) -> 'TensorboardLogParser':
+    for event_file in self._event_files:
+      if verbose:
+        print(f"parse_run (tfevents) : Reading {event_file} ...",
+              file=sys.stderr, flush=True)  # yapf: disable
 
-    for step, tag_name, value in iter_scalar_summary_from_event_file(
-        event_file):
-      all_data[step][tag_name] = value
+      for step, tag_name, value in \
+          self._iter_scalar_summary_from_event_file(event_file):
+        self._all_data[step][tag_name] = value
 
-  for t in list(all_data.keys()):
-    all_data[t]['global_step'] = t
+    for t in list(self._all_data.keys()):
+      self._all_data[t]['global_step'] = t
 
-  df = pd.DataFrame(all_data).T
+    return self
 
-  # Reorder column names in a lexicographical order
-  df = df.reindex(sorted(df.columns), axis=1)
-  return df
+  def parse(self) -> pd.DataFrame:
+    df = pd.DataFrame(self._all_data).T
+
+    # Reorder column names in a lexicographical order
+    df = df.reindex(sorted(df.columns), axis=1)
+    return df
+
+
+def parse_run_tensorboard(run_folder,
+                          fillna=False,
+                          verbose=False) -> pd.DataFrame:
+  """Create a pandas DataFrame from tensorboard eventfile or run directory."""
+  return TensorboardLogParser(run_folder).read(verbose=verbose).parse()
+
+
+#########################################################################
+# Run Loader Functions
+#########################################################################
 
 
 def _validate_run_postprocess(run):
@@ -309,6 +372,27 @@ def get_runs_parallel(
 
 
 get_runs = get_runs_parallel
+
+#########################################################################
+# Run Loader Objects
+#########################################################################
+
+
+class RunLoader:
+  """A manager that supports parallel and incremental loading of runs."""
+
+  def __init__(self, run_dirs):
+    pass
+
+  def reload(self):
+    pass
+
+  def get_runs(self) -> RunList:
+    pass
+
+  def close(self):
+    pass
+
 
 __all__ = (
     'get_runs',

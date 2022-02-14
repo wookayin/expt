@@ -26,11 +26,11 @@ class TestGetRuns:
       return
 
     print(f"Downloading and extracting from {URL} ...")
-    with (urllib.request.urlopen(URL) as z,
-          tempfile.NamedTemporaryFile() as tfile):
-      tfile.write(z.read())
-      tfile.seek(0)
-      shutil.unpack_archive(tfile.name, FIXTURE_PATH, format='zip')
+    with urllib.request.urlopen(URL) as z:
+      with tempfile.NamedTemporaryFile() as tfile:
+        tfile.write(z.read())
+        tfile.seek(0)
+        shutil.unpack_archive(tfile.name, FIXTURE_PATH, format='zip')
 
   def test_parse_tensorboard(self):
     r = data_loader.parse_run(Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2")
@@ -38,9 +38,19 @@ class TestGetRuns:
 
     assert len(r) >= 400
     np.testing.assert_array_equal(
-        r.columns,
-        ['accuracy/accuracy', 'global_step', 'xent/xent_1']
-    )
+        r.columns, ['accuracy/accuracy', 'global_step', 'xent/xent_1'])
+
+  def test_parse_progresscsv(self):
+    r = data_loader.parse_run(Path(FIXTURE_PATH) / "sample_csv")
+    print(r)
+
+    assert len(r) >= 50
+    np.testing.assert_array_equal(r.columns, [
+        'initial_reset_time',
+        'episode_rewards',
+        'episode_lengths',
+        'episode_end_times',
+    ])
 
 
 if __name__ == '__main__':
