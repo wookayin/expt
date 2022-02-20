@@ -44,7 +44,7 @@ def runs_gridsearch() -> RunList:
 
 class TestRun(_TestBase):
 
-  def testRunProperties(self):
+  def test_run_properties(self):
     r = Run("/tmp/some-run",
             pd.DataFrame({
                 "a": [1, 2, 3, 4],
@@ -61,7 +61,7 @@ class TestRunList(_TestBase):
   def _fixture(self) -> RunList:
     return RunList(Run("r%d" % i, pd.DataFrame({"x": [i]})) for i in range(16))
 
-  def testRunList(self):
+  def test_basic_operations(self):
     # instantiation
     r0 = Run("r0", pd.DataFrame({"y": [1, 2, 3]}))
     r1 = Run("r1", pd.DataFrame({"y": [1, 4, 9]}))
@@ -87,7 +87,7 @@ class TestRunList(_TestBase):
     runs.extend([r2])
     assert len(runs) == 3
 
-  def testRunListSlice(self):
+  def test_slice(self):
     runs = self._fixture()
 
     # slice (sublist) should be a RunList
@@ -99,7 +99,7 @@ class TestRunList(_TestBase):
     assert isinstance(o, RunList)
     assert [r.name for r in o] == ["r14", "r12", "r10", "r8", "r6"]
 
-  def testRunListFilter(self):
+  def test_filter(self):
     runs = self._fixture()
 
     # basic operations
@@ -115,7 +115,7 @@ class TestRunList(_TestBase):
     filtered = V(runs.filter("r1*"))  # 1, 10-15
     assert len(filtered) == 7
 
-  def testRunListGrep(self):
+  def test_grep(self):
     runs = self._fixture()
     assert len(runs.grep("1")) == 7
     assert len(runs.grep("^1$")) == 0
@@ -124,12 +124,12 @@ class TestRunList(_TestBase):
     assert len(runs.grep(re.compile(".*13$"))) == 1
     assert len(runs.grep("R", flags=re.IGNORECASE)) == 16
 
-  def testRunListMap(self):
+  def test_map(self):
     runs = self._fixture()
     t = V(runs.map(lambda run: run.name))
     assert t == ["r%d" % i for i in range(16)]
 
-  def testRunListToHypothesis(self):
+  def test_to_hypothesis(self):
     runs = self._fixture()
     h = V(runs.to_hypothesis(name="runlist"))
     assert isinstance(h, Hypothesis)
@@ -139,7 +139,7 @@ class TestRunList(_TestBase):
     for i in range(16):
       assert h.runs[i] is runs[i]
 
-  def testRunListGroupby(self):
+  def test_groupby(self):
     runs = self._fixture()
     groups = dict(runs.groupby(lambda run: int(run.name[1:]) % 5))
     V(groups)
@@ -150,7 +150,7 @@ class TestRunList(_TestBase):
         "r0", "r5", "r10", "r15"
     ]
 
-  def testRunListExtract(self, runs_gridsearch: RunList):
+  def test_extract(self, runs_gridsearch: RunList):
     print(runs_gridsearch)
     df = runs_gridsearch.extract(
         r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
@@ -160,7 +160,7 @@ class TestRunList(_TestBase):
     assert list(df['env_id'].unique()) == ["halfcheetah", "hopper", "humanoid"]  # yapf: disable
     assert list(df['seed'].unique()) == ['0', '1']
 
-  def testToDataFrame(self, runs_gridsearch: RunList):
+  def test_to_dataframe(self, runs_gridsearch: RunList):
     runs = runs_gridsearch
 
     def _config_fn(run: Run):
@@ -181,7 +181,7 @@ class TestRunList(_TestBase):
 
 class TestHypothesis(_TestBase):
 
-  def testHypothesisCreation(self):
+  def test_creation(self):
     # instance creation (with auto type conversion)
     h = Hypothesis("hy0", [])
     print(h)
@@ -208,11 +208,11 @@ class TestHypothesis(_TestBase):
     assert h.name == 'generator'
     assert len(h) == 3
 
-  def testHypothesisData(self):
+  def test_properties(self):
     # test gropued, columns, mean, std, min, max, etc.
     pass
 
-  def testHypothesisInterpolate(self):
+  def test_interpolate(self):
     """Tests interpolate and subsampling when runs have different support."""
     # yapf: disable
     h = Hypothesis.of(name="h", runs=[
@@ -263,14 +263,14 @@ class TestHypothesis(_TestBase):
 
 class TestExperiment(_TestBase):
 
-  def testFromDataFrameDefault(self, runs_gridsearch: RunList):
+  def test_create_from_dataframe(self, runs_gridsearch: RunList):
     """Tests Experiment.from_dataframe with the minimal defaults."""
     df = runs_gridsearch.to_dataframe()
     ex = Experiment.from_dataframe(df)
     # Each run becomes an individual hypothesis.
     assert len(ex.hypotheses) == 12
 
-  def testFromDataFrameMulticolumns(self, runs_gridsearch: RunList):
+  def test_create_from_dataframe_multicolumns(self, runs_gridsearch: RunList):
     """Tests Experiment.from_dataframe where the dataframe consists of
         multiple columns (usually parsed via RunList.extract)."""
     # Reuse the fixture data from testRunListExtract.
@@ -293,7 +293,7 @@ class TestExperiment(_TestBase):
     assert ex.name == "Exp.foobar"
     # yapf: enable
 
-  def testFromDataFrameGeneral(self, runs_gridsearch: RunList):
+  def test_create_from_dataframe_general(self, runs_gridsearch: RunList):
     """Organize a RunList into Hypothesis grouped by (algorithm, env),
         i.e. only averaging over random seed."""
     df = runs_gridsearch.extract(
@@ -312,7 +312,7 @@ class TestExperiment(_TestBase):
     assert ex.hypotheses[0].name == 'halfcheetah-ppo'
     assert len(ex.hypotheses) == 6
 
-  def testExperimentIndexing(self):
+  def test_indexing(self):
     h0 = Hypothesis("hyp0", Run('r0', pd.DataFrame({"a": [1, 2, 3]})))
     h1 = Hypothesis("hyp1", Run('r1', pd.DataFrame({"a": [4, 5, 6]})))
 
@@ -353,7 +353,7 @@ class TestExperiment(_TestBase):
     with pytest.raises(NotImplementedError):  # TODO
       r = V(ex[['hyp1', 'hyp0'], 'a'])
 
-  def testTopK(self):
+  def test_select_top(self):
     # yapf: disable
     hypos = [
         Hypothesis(f"hyp{i}", Run(f'r{i}', pd.DataFrame({

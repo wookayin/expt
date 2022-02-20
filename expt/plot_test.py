@@ -43,7 +43,7 @@ def matplotlib_rcparams(kwargs: dict):
 
 class TestGridPlot:
 
-  def testLayout(self):
+  def test_layout(self):
     g = expt.plot.GridPlot(y_names=["single"])
     assert g.axes.shape == (1, 1)
 
@@ -92,7 +92,7 @@ class TestHypothesisPlot:
 
   # TODO: This test suite is incomplete. Add more tests.
 
-  def testGridSpec(self):
+  def test_grid_spec(self):
     hypothesis = self._fixture()
 
     # single y
@@ -109,7 +109,7 @@ class TestHypothesisPlot:
     assert V(g.axes.shape) == (2, 2)
     assert V(g.axes_active.shape) == (3,)
 
-  def testWhenFigAxesAreGiven(self):
+  def test_when_fig_axes_are_given(self):
     hypothesis = self._fixture()
 
     # single y given a single axesplot
@@ -139,7 +139,7 @@ class TestHypothesisPlot:
     assert g.axes_active[0] is axes.flat[0]
     assert g.axes_active[1] is axes.flat[1]
 
-  def testSuptitle(self):
+  def test_suptitle(self):
     hypothesis = self._fixture()
 
     # when given, it should be set
@@ -159,7 +159,7 @@ class TestHypothesisPlot:
     g = hypothesis.plot(grid=g, y='loss')
     assert g.fig._suptitle is None or g.fig._suptitle.get_text() == ""
 
-  def testSingleHypothesisLegend(self):
+  def test_single_hypothesis_legend(self):
     hypothesis = self._fixture()
 
     # default behavior: no legend
@@ -200,7 +200,7 @@ class TestHypothesisPlot:
     with pytest.raises(ValueError, match='should have length'):
       g.add_legend(ax=0, labels=["custom label", "too many args"])
 
-  def testErrorRangeAveraging(self):
+  def test_error_range_averaging(self):
     hypothesis = self._fixture()
 
     # show individual runs
@@ -219,7 +219,7 @@ class TestHypothesisPlot:
 
     # TODO: what if some runs are truncated?
 
-  def testCustomErrFn(self):
+  def test_error_range_custom_fn(self):
     """Tests plot(err_fn=...)"""
     hypothesis = self._fixture()
 
@@ -262,7 +262,7 @@ class TestExperimentPlot:
     ex = Experiment(name="ex", hypotheses=[h0, h1])
     return ex
 
-  def testGridPlotBasic(self):  # TODO: Add more complex scenario.
+  def test_gridplot_basic(self):  # TODO: Add more complex scenario.
     ex = self._fixture()
 
     # plot all known columns
@@ -292,10 +292,13 @@ class TestExperimentPlot:
   # we can reuse the same test suite,
   # replacing `hypothesis` with `ex` (backed by self._fixture())
   # TODO: Use inheritance.
-  testWhenFigAxesAreGiven = TestHypothesisPlot.testWhenFigAxesAreGiven
-  testSuptitle = TestHypothesisPlot.testSuptitle
+  def test_when_fig_axes_are_given(self):
+    TestHypothesisPlot.test_when_fig_axes_are_given(self)  # type: ignore
 
-  def testExMultiHypothesisLegend(self):
+  def test_suptitle(self):
+    TestHypothesisPlot.test_suptitle(self)  # type: ignore
+
+  def test_multi_hypothesis_legend(self):
     ex = self._fixture()
 
     # default behavior: a legend on the first subplot (assume >1 subplots)
@@ -339,7 +342,7 @@ class TestExperimentPlot:
     for ax in g.axes_active:
       assert ax.get_legend() is None
 
-  def testColorKwargs(self):
+  def test_color_kwargs(self):
     import cycler
     ex = self._fixture()
     assert len(ex.hypotheses) == 2
