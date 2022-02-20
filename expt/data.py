@@ -129,7 +129,7 @@ class RunList(Sequence[Run]):
                       "but given {}".format([type(r) for r in runs]))
     return runs
 
-  def __getitem__(self, index_or_slice):
+  def __getitem__(self, index_or_slice) -> Union[Run, 'RunList']:
     o = self._runs[index_or_slice]
     if isinstance(index_or_slice, slice):
       o = RunList(o)

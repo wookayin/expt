@@ -1,6 +1,7 @@
 """Utilities for expt."""
 
 import collections
+import contextlib
 from typing import List
 
 from typeguard import typechecked
@@ -45,3 +46,12 @@ class NoopTqdm:
 
   def __getattr__(self, _):
     return self.noop
+
+
+@contextlib.contextmanager
+def timer(name=""):
+  import time
+  _start = time.time()
+  yield
+  _end = time.time()
+  print("[%s] Elapsed time : %.3f sec" % (name, _end - _start))

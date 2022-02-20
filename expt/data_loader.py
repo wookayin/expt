@@ -1,12 +1,14 @@
 """Data Loader for expt."""
 
 import abc
+import atexit
 import dataclasses
 import functools
 import itertools
 import multiprocessing.pool
 import os
 import sys
+import threading
 import warnings
 from collections import Counter, defaultdict, namedtuple
 from pathlib import Path
@@ -373,6 +375,7 @@ def _handle_path(p, verbose, fillna, run_postprocess_fn=None) -> Optional[Run]:
     return None
 
 
+# TODO: Deprecate in favor of RunLoader.
 def get_runs_parallel(
     *path_globs,
     verbose=False,
@@ -464,17 +467,162 @@ get_runs = get_runs_parallel
 class RunLoader:
   """A manager that supports parallel and incremental loading of runs."""
 
-  def __init__(self, run_dirs):
-    pass
+  def __init__(
+      self,
+      *path_globs,
+      verbose: bool = False,
+      progress_bar: bool = True,
+      run_postprocess_fn: Optional[Callable[[Run], Run]] = None,
+      n_jobs: int = 8,
+  ):
+    self._readers = []
+    self._reader_contexts = []
 
-  def reload(self):
-    pass
+    self._verbose = verbose
+    self._progress_bar = progress_bar
+    self._run_postprocess_fn = run_postprocess_fn
 
-  def get_runs(self) -> RunList:
-    pass
+    self.add_paths(*path_globs)
+
+    # Initialize multiprocess pool.
+    if n_jobs > 1:
+      self._pool = multiprocess.pool.Pool(processes=n_jobs)
+    else:
+      self._pool = None
+
+    atexit.register(self.close)
 
   def close(self):
-    pass
+    if self._pool:
+      self._pool.close()
+      self._pool = None
+
+  def add_paths(self, *path_globs):
+    for path_glob in path_globs:
+      paths = list(sorted(path_util.glob(path_glob)))
+      if self._verbose and not paths:
+        print(f"Warning: a glob pattern '{path_glob}' "
+              "did not match any files.", file=sys.stderr)  # yapf: disable
+
+      # TODO: Creating LogReader/context for each path can be expensive
+      # and therefore still needs to be parallelized (as in get_runs_parallel)
+      for log_dir in paths:
+        # TODO: When any one of them fails or not ready? ignore, or raise?
+        self.add_log_dir(log_dir)
+
+  def add_log_dir(self, log_dir: Union[Path, str]) -> LogReader:
+    reader = _get_reader_for(log_dir)
+    self.add_reader(reader)
+    return reader
+
+  def add_reader(self, reader: LogReader):
+    self._readers.append(reader)
+    self._reader_contexts.append(reader.new_context())
+
+  @staticmethod
+  def _worker_handler(
+      reader: LogReader,
+      context: LogReaderContext,
+      run_postprocess_fn: Optional[Callable[[Run], Run]] = None,
+  ) -> Tuple[Optional[Run], LogReaderContext]:
+    """The job function to be executed in a "forked" worker process."""
+    try:
+      context = reader.read(context)
+      df = reader.result(context)
+      run = Run(path=reader.log_dir, df=df)
+      if run_postprocess_fn:
+        run = run_postprocess_fn(run)
+        _validate_run_postprocess(run)
+      return run, context
+    except (pd.errors.EmptyDataError, FileNotFoundError) as e:  # type: ignore
+      # Ignore empty data.
+      print(f"[!] {reader.log_dir} : {e}", file=sys.stderr, flush=True)
+      return None, context
+
+  def get_runs(self, parallel=True) -> RunList:
+    """Refresh and get all the runs from all the log directories.
+
+    This will work as incremental reading: the portion of data that was read
+    from the last get_runs() call will be cached.
+    """
+    if not self._readers:
+      return RunList([])  # special case, no matches
+
+    # Reload the data (incrementally or read from scratch) and return runs.
+    if self._pool is None or not parallel:
+      return self._get_runs_serial()
+
+    else:
+      pool = self._pool
+      pbar = tqdm(total=1) if self._progress_bar else util.NoopTqdm()
+
+      def _pbar_callback_done(run):
+        del run  # unused
+        pbar.update(1)
+        pbar.refresh()
+
+      def _pbar_callback_error(e):
+        del e  # unused
+        pbar.bar_style = 'danger'  # type: ignore
+
+      futures = []
+      for reader, context in zip(self._readers, self._reader_contexts):
+        future = pool.apply_async(
+            self._worker_handler,
+            # Note: Serialization of context can be EXTREMELY slow
+            # depending on the data type of context objects.
+            args=[reader, context],
+            kwds=dict(run_postprocess_fn=self._run_postprocess_fn),
+            callback=_pbar_callback_done,
+            error_callback=_pbar_callback_error,
+        )
+        futures.append(future)
+
+      # The total number can grow while some jobs are running.
+      _completed = int(pbar.n)
+      pbar.reset(total=len(futures))
+      pbar.n = pbar.last_print_n = _completed
+      pbar.refresh()
+
+      result = []
+      for j, future in enumerate(futures):
+        reader = self._readers[j]
+        run, self._reader_contexts[j] = future.get()
+
+        # TODO: better deal with failed runs.
+        if run is not None:
+          result.append(run)
+
+      # All runs have been collected, close the progress bar.
+      pbar.close()
+
+    return RunList(result)
+
+  def _get_runs_serial(self) -> RunList:
+    """Non-parallel version of get_runs().
+
+    It might be useful for debugging, but also might be faster for smaller
+    numbers of runs and the rows in the log data, than the parallel version
+    due to overhead in multiprocess, TF initialization, and serialization
+    (which can often take up to 1~2 seconds).
+    """
+    runs = []
+    pbar = tqdm(total=len(self._readers)) \
+      if self._progress_bar else util.NoopTqdm()  # noqa: E127
+
+    for j, reader in enumerate(self._readers):
+      run, new_context = self._worker_handler(
+          reader=reader,
+          context=self._reader_contexts[j],
+          run_postprocess_fn=self._run_postprocess_fn)
+      self._reader_contexts[j] = new_context
+
+      # TODO: better deal with failed runs.
+      if run is not None:
+        runs.append(run)
+      pbar.update(1)
+
+    return RunList(runs)
 
 
 __all__ = (
