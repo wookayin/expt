@@ -1,15 +1,17 @@
 """Data Loader for expt."""
 
 import abc
+import dataclasses
 import functools
 import itertools
 import multiprocessing.pool
 import os
 import sys
 import warnings
-from collections import defaultdict
+from collections import Counter, defaultdict, namedtuple
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import (Any, Callable, Dict, Iterator, List, Mapping, Optional,
+                    Tuple, TypeVar, Union)
 
 import multiprocess.pool
 import numpy as np
@@ -27,9 +29,15 @@ except ImportError:
 # Individual Run Reader
 #########################################################################
 
+LogReaderContext = TypeVar('LogReaderContext')
+
 
 class LogReader:
-  """Interface for reading logs."""
+  """Interface for reading logs.
+
+  LogReaders should maintain its internal state stored in a context object,
+  so that it can work even in a forked multiprocess worker.
+  """
 
   def __init__(self, log_dir):
     self._log_dir = log_dir
@@ -39,15 +47,28 @@ class LogReader:
     return self._log_dir
 
   @abc.abstractmethod
-  def read(self, verbose=False):
-    """Load the remaning portion (or all) of the data, and return it."""
-    return self
+  def new_context(self) -> LogReaderContext:  # type: ignore
+    """Create a new, empty context. This context can be used to store
+    all the internal states or data for reading logs. Or it can be a Process
+    object if you want a daemon reader process running in the background.
+    The context object will be serialized for multiprocess IPC, when being
+    passed to a worker process.
+
+    IMPORTANT: Serialization for multiprocessing is often very slow,
+    outweighing the benefit of parallelization. To avoid expensive memory copy,
+    be sure to use shared memory or serialization-free data structure."""
+    return dict()
 
   @abc.abstractmethod
-  def parse(self) -> pd.DataFrame:
-    """Return the whole log data read so far as a DataFrame.
+  def read(self, context: LogReaderContext, verbose=False) -> LogReaderContext:
+    """Load the remaining portion (or all) of the data."""
+    return context
 
-    Must have called read() before."""
+  @abc.abstractmethod
+  def result(self, context: LogReaderContext) -> pd.DataFrame:
+    """Return the log data read as a DataFrame."""
+    del context
+    raise NotImplementedError
 
   def __repr__(self):
     return f"<{type(self).__name__}, log_dir={self.log_dir}>"
@@ -89,7 +110,6 @@ class CSVLogReader(LogReader):
 
   def __init__(self, log_dir):
     super().__init__(log_dir=log_dir)
-    self._df = None
 
     # Find the target CSV file.
     # Try progress.csv or log.csv from folder
@@ -111,7 +131,9 @@ class CSVLogReader(LogReader):
 
     self._csv_path = detected_csv
 
-  def read(self, verbose=False):
+  def read(self, context, verbose=False):
+    del context  # unused, this implementation always read the data in full.
+
     # Read the detected file `p`
     if verbose:
       print(f"parse_run (csv): Reading {self._csv_path}",
@@ -121,13 +143,11 @@ class CSVLogReader(LogReader):
     with open(self._csv_path, mode='r', encoding='utf-8') as f:
       df = pd.read_csv(f)  # type: ignore
 
-    self._df = df
-    return self
+    return df
 
-  def parse(self, fillna=False) -> pd.DataFrame:
-    df = self._df
-    if df is None:
-      raise RuntimeError("read() was not called.")
+  def result(self, context, fillna=False) -> pd.DataFrame:
+    df = context
+    assert isinstance(df, pd.DataFrame)
     if fillna:
       df = df.fillna(0)
     return df
@@ -147,19 +167,21 @@ class TensorboardLogReader(LogReader):
     if not self._event_files:  # no event file detected
       raise FileNotFoundError(f"No event file detected in {self.log_dir}")
 
-    # Initialize the internal data structure.
-    # TODO: This stores all the data into memory. It is okay for the reader
-    # to be "stateful", when a worker process instantiates a new reader object
-    # and discard all the intermediate data when reading is complete; however,
-    # incremental loading will be difficult when it comes to multiprocessing
-    # because the data has to be copied or shared across different process,
-    # and the memory footprint can unexpectedly grow to a potential leak.
-    # Also, TF-internal summary iterator might not be pickleable or fork-safe.
-    # int(timestep) -> dict: {columns -> ...}
-    self._all_data: Dict[int, Dict[str, Any]] = defaultdict(dict)
+    # Initialize tensorflow earlier otherwise the forked processes will
+    # need to do it again.
+    import tensorflow as tf  # type: ignore
 
+  @dataclasses.dataclass
+  class Context:  # LogReaderContext
+    rows_read: Counter = dataclasses.field(default_factory=Counter)
+    data: pd.DataFrame = dataclasses.field(default_factory=pd.DataFrame)
+    last_read_rows: int = 0
+
+  def new_context(self) -> 'Context':
+    return self.Context()
+
+  # Helper function
   def _extract_scalar_from_proto(self, value, step):
-    from tensorflow.python.framework.dtypes import DType
 
     def _read_proto(node, path: str):
       for p in path.split('.'):
@@ -177,61 +199,90 @@ class TensorboardLogReader(LogReader):
       if plugin_name == 'scalars':
         t = _read_proto(value, 'tensor')
         if t:
+          from tensorflow.python.framework.dtypes import DType
           dtype = DType(t.dtype).as_numpy_dtype
           simple_value = np.frombuffer(t.tensor_content, dtype=dtype)[0]
           yield step, value.tag, simple_value
 
-  def _iter_scalar_summary_from_event_file(self, event_file):
-    from tensorflow.core.util import event_pb2
+  def _iter_scalar_summary_from(self, event_file, *,
+                                skip=0, limit=None,  # per event_file
+                                rows_callback):  # yapf: disable
+    from tensorflow.core.util.event_pb2 import Event
+    from tensorflow.python.lib.io import tf_record
 
-    try:
-      # avoid DeprecationWarning on tf_record_iterator
-      # pyright: reportMissingImports=false
-      from tensorflow.python._pywrap_record_io import RecordIterator
+    def summary_iterator(path, skip=0):
+      from tensorflow.python.util import deprecation as tf_deprecation
+      with tf_deprecation.silence():  # pylint: disable=not-context-manager
+        # compatible with TF 1.x, 2.x (although deprecated)
+        eventfile_tfrecord = tf_record.tf_record_iterator(path)
+        eventfile_tfrecord = itertools.islice(
+            eventfile_tfrecord,
+            skip,
+            skip + limit if limit is not None else None,
+        )
+      for serialized_pb in eventfile_tfrecord:
+        yield Event.FromString(serialized_pb)  # type: ignore
 
-      def summary_iterator(path):
-        for r in RecordIterator(path, ""):
-          yield event_pb2.Event.FromString(r)  # type: ignore
-    except Exception:
-      from tensorflow.python.summary.summary_iterator import summary_iterator
+    rows_read = 0
 
-    for event in summary_iterator(event_file):
+    for event in summary_iterator(event_file, skip=skip):
+      rows_read += 1
       step = int(event.step)
       if not event.HasField('summary'):
         continue
       for value in event.summary.value:
         yield from self._extract_scalar_from_proto(value, step=step)
 
-  def read(self, verbose=False) -> 'TensorboardLogReader':
+    rows_callback(rows_read)
+
+  def read(self, context: 'Context', verbose=False):
+    context.last_read_rows = 0
+
+    chunk = defaultdict(dict)  # tag_name -> step -> value
     for event_file in self._event_files:
       if verbose:
         print(f"parse_run (tfevents) : Reading {event_file} ...",
               file=sys.stderr, flush=True)  # yapf: disable
 
+      def _callback(rows_read: int):
+        context.rows_read.update({event_file: rows_read})
+        context.last_read_rows += rows_read
+
       for step, tag_name, value in \
-          self._iter_scalar_summary_from_event_file(event_file):
-        self._all_data[step][tag_name] = value
+          self._iter_scalar_summary_from(
+              event_file, skip=context.rows_read[event_file],
+              rows_callback=_callback,
+          ):  # noqa: E125
+        chunk[tag_name][step] = value
 
-    for t in list(self._all_data.keys()):
-      self._all_data[t]['global_step'] = t
+    df_chunk = pd.DataFrame(chunk)
+    df_chunk['global_step'] = df_chunk.index
 
-    return self
+    # Merge the previous dataframe and the new one that was read.
+    # The current chunk will overwrite any existing previous row.
+    df = df_chunk.combine_first(context.data)
+    context.data = df
 
-  def parse(self) -> pd.DataFrame:
-    df = pd.DataFrame(self._all_data).T
+    return context
 
+  def result(self, context) -> pd.DataFrame:
     # Reorder column names in a lexicographical order
+    df = context.data
     df = df.reindex(sorted(df.columns), axis=1)
     return df
 
 
 def parse_run_progresscsv(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
-  return CSVLogReader(log_dir).read(verbose=verbose).parse(fillna=fillna)
+  parser = CSVLogReader(log_dir)
+  ctx = parser.read(parser.new_context(), verbose=verbose)
+  return parser.result(ctx, fillna=fillna)
 
 
 def parse_run_tensorboard(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
-  """Create a pandas DataFrame from tensorboard eventfile or run directory."""
-  return TensorboardLogReader(log_dir).read(verbose=verbose).parse()
+  del fillna  # unused
+  parser = TensorboardLogReader(log_dir)
+  ctx = parser.read(parser.new_context(), verbose=verbose)
+  return parser.result(ctx)
 
 
 def _get_reader_for(log_dir):

@@ -14,23 +14,31 @@ from expt import data_loader
 __PATH__ = os.path.abspath(os.path.dirname(__file__))
 FIXTURE_PATH = os.path.join(__PATH__, '../fixtures')
 
+# Suppress and silence TF warnings.
+# such as, cpu_utils.cc: Failed to get CPU frequency: 0 Hz
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+
+def _setup_fixture():
+  """Set up example fixture data."""
+  URL = "https://tensorboard.dev/static/log_set-2021-03-11.zip"
+
+  if (Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2").exists():
+    return
+
+  print(f"Downloading and extracting from {URL} ...")
+  with urllib.request.urlopen(URL) as z:
+    with tempfile.NamedTemporaryFile() as tfile:
+      tfile.write(z.read())
+      tfile.seek(0)
+      shutil.unpack_archive(tfile.name, FIXTURE_PATH, format='zip')
+
 
 class TestGetRuns:
 
   @classmethod
   def setup_class(cls):
-    """Set up example fixture data."""
-    URL = "https://tensorboard.dev/static/log_set-2021-03-11.zip"
-
-    if (Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2").exists():
-      return
-
-    print(f"Downloading and extracting from {URL} ...")
-    with urllib.request.urlopen(URL) as z:
-      with tempfile.NamedTemporaryFile() as tfile:
-        tfile.write(z.read())
-        tfile.seek(0)
-        shutil.unpack_archive(tfile.name, FIXTURE_PATH, format='zip')
+    _setup_fixture()
 
   def test_parse_tensorboard(self):
     r = data_loader.parse_run(Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2")
