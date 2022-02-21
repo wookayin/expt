@@ -441,6 +441,16 @@ class Hypothesis(Iterable[Run]):
             Run(r.path, df_new) for (r, df_new) in zip(self.runs, dfs_interp)
         ])
 
+  def apply(self, fn: Callable[[pd.DataFrame], pd.DataFrame]) -> 'Hypothesis':
+    """Apply a transformation on all underlying DataFrames.
+
+    This returns a copy of Hypothesis and children Run objects.
+    """
+    return Hypothesis(
+        name=self.name,
+        runs=[Run(r.path, fn(r.df)) for r in self.runs],
+    )
+
 
 class Experiment(Iterable[Hypothesis]):
   """An Experiment is a collection of Hypotheses, structured with
@@ -759,6 +769,16 @@ class Experiment(Iterable[Hypothesis]):
             h.interpolate(x_column, n_samples=n_samples)
             for h in self.hypotheses
         ],
+    )
+
+  def apply(self, fn: Callable[[pd.DataFrame], pd.DataFrame]) -> 'Experiment':
+    """Apply a transformation on all underlying DataFrames.
+
+    This returns a copy of Experiment and children Hypothesis objects.
+    """
+    return Experiment(
+        name=self.name,
+        hypotheses=[h.apply(fn) for h in self.hypotheses],
     )
 
   def hvplot(self, *args, **kwargs):

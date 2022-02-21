@@ -181,6 +181,25 @@ class TestRunList(_TestBase):
 
 class TestHypothesis(_TestBase):
 
+  def _fixture(self):
+    # yapf: disable
+    h = Hypothesis.of(name="h", runs=[
+        # represents y = 2x curve
+        Run("r0", pd.DataFrame({
+            "x": [0, 2, 4, 6, 8],
+            "y": [0, 4, 8, 12, 16],
+            "z": [{"v": 1}, {"v": 2}, {"v": 3}, {"v": 4}, {"v": 5}],
+        })),
+        # represents y = 2x + 1 curve
+        Run("r1", pd.DataFrame({
+            "x": [1, 3, 5, 7, 9],
+            "y": [3, 7, 11, 15, 19],
+            "z": [{"v": -1}, {"v": -2}, {"v": -3}, {"v": -4}, {"v": -5}],
+        })),
+    ])
+    # yapf: enable
+    return h
+
   def test_creation(self):
     # instance creation (with auto type conversion)
     h = Hypothesis("hy0", [])
@@ -214,20 +233,7 @@ class TestHypothesis(_TestBase):
 
   def test_interpolate(self):
     """Tests interpolate and subsampling when runs have different support."""
-    # yapf: disable
-    h = Hypothesis.of(name="h", runs=[
-        # represents y = 2x curve
-        Run("r0", pd.DataFrame({"x": [0, 2, 4, 6, 8],
-                                "y": [0, 4, 8, 12, 16],
-                                "z": [{}, {}, {}, {}, {}],
-                                })),
-        # represents y = 2x + 1 curve
-        Run("r1", pd.DataFrame({"x": [1, 3, 5, 7, 9],
-                                "y": [3, 7, 11, 15, 19],
-                                "z": [{}, {}, {}, {}, {}],
-                                })),
-    ])
-    # yapf: enable
+    h: Hypothesis = self._fixture()
 
     # (1) Test a normal case.
     h_interpolated = h.interpolate("x", n_samples=91)
@@ -259,6 +265,21 @@ class TestHypothesis(_TestBase):
     # (2) Invalid use
     with pytest.raises(ValueError, match="Unknown column"):
       h_interpolated = h.interpolate("unknown_index", n_samples=1000)
+
+  def test_apply(self):
+    h: Hypothesis = self._fixture()
+
+    def _transform(df: pd.DataFrame) -> pd.DataFrame:
+      df = df.copy()
+      df['y'] = df['y'] / 4
+      return df
+
+    h2 = h.apply(_transform)
+    assert h.name == h2.name
+    print(h[0].df)
+    print(h2[0].df)
+    np.testing.assert_array_equal(h[0].df['y'], [0, 4, 8, 12, 16])
+    np.testing.assert_array_equal(h2[0].df['y'], [0, 1, 2, 3, 4])
 
 
 class TestExperiment(_TestBase):
