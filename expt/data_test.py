@@ -379,7 +379,7 @@ class TestExperiment(_TestBase):
     hypos = [
         Hypothesis(f"hyp{i}", Run(f'r{i}', pd.DataFrame({
             "score": [i * 100],  # the greater, the better (argmax: 4)
-            "loss" : -i,         # the lower,   the better (argmax: 4)
+            "loss": -i,          # the lower,   the better (argmax: 4)
         })))
         for i in range(5)
     ]

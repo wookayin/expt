@@ -31,7 +31,8 @@ import re
 import types
 from dataclasses import dataclass  # for python 3.6, backport needed
 from typing import (Any, Callable, Dict, Iterable, Iterator, List, Mapping,
-                    MutableMapping, Optional, Sequence, Tuple, TypeVar, Union)
+                    MutableMapping, Optional, Sequence, Tuple, TypeVar, Union,
+                    overload)
 
 import numpy as np
 import pandas as pd
@@ -627,9 +628,20 @@ class Experiment(Iterable[Hypothesis]):
         ',\n '.join([h.__repr__(indent=' ') for h in self.hypotheses]) +
         ",\n])")
 
+  # yapf: disable
+  @overload
+  def __getitem__(self, key: str) -> Hypothesis: ...
+  @overload
+  def __getitem__(self, key: int) -> Hypothesis: ...
+  @overload
+  def __getitem__(self, key: Union[Tuple, List, np.ndarray]) -> np.ndarray: ...
+  @overload
+  def __getitem__(self, key: Tuple) -> pd.DataFrame: ...
+  # yapf: enable
+
   def __getitem__(
       self,
-      key: Union[str, Tuple],
+      key: Union[int, str, Tuple, List, np.ndarray],
   ) -> Union[Hypothesis, np.ndarray, Run, pd.DataFrame]:
     """Return self[key].
 
