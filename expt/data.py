@@ -284,6 +284,13 @@ class Hypothesis(Iterable[Run]):
 
     return cls(name=name or '', runs=runs)
 
+  # yapf: disable
+  @overload
+  def __getitem__(self, k: int) -> Run: ...
+  @overload
+  def __getitem__(self, k: str) -> pd.DataFrame: ...
+  # yapf: enable
+
   def __getitem__(self, k):
     if isinstance(k, int):
       return self.runs[k]

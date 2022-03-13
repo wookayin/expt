@@ -72,10 +72,11 @@ except ImportError:
 
 if get_standard_colors is None:
   try:
-    # pandas 1.0.0+
-    from pandas.plotting._matplotlib.style import _get_standard_colors
+    # pandas >=1.0, <1.2
+    from pandas.plotting._matplotlib.style import \
+        _get_standard_colors  # type: ignore
   except ImportError:
     # pandas <1.0
-    from pandas.plotting._style import _get_standard_colors
+    from pandas.plotting._style import _get_standard_colors  # type: ignore
 
   get_standard_colors = _get_standard_colors

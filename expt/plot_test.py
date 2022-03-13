@@ -1,7 +1,7 @@
 """Tests for expt.plot"""
-
 import contextlib
 import sys
+from typing import cast
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -154,7 +154,7 @@ class TestHypothesisPlot:
     assert axes.shape == (2,)
     with pytest.raises(ValueError) as ex:
       g = hypothesis.plot(y=["loss", "accuracy"], ax=axes)
-      #assert g.axes.shape == (1, 2)
+      # assert g.axes.shape == (1, 2)
     assert "the rank should be 2 (but given 1)" in str(ex.value)
 
     # two y's, given 2D array of axesplots
@@ -165,13 +165,19 @@ class TestHypothesisPlot:
     assert g.axes_active[1] is axes.flat[1]
 
   def test_suptitle(self, hypothesis: Hypothesis):
+    from matplotlib.text import Text
+
+    def _ensureText(t) -> Text:
+      assert isinstance(t, Text)
+      return cast(Text, t)
+
     # when given, it should be set
     g = hypothesis.plot(suptitle="super!")
-    assert g.fig._suptitle.get_text() == "super!"
+    assert _ensureText(g.fig._suptitle).get_text() == "super!"
 
     # default behavior: hypothesis name?
     g = hypothesis.plot()
-    assert g.fig._suptitle.get_text() == hypothesis.name
+    assert _ensureText(g.fig._suptitle).get_text() == hypothesis.name
 
     # default behavior: if ax or grid is given, do not set suptitle
     fig, ax = plt.subplots()
@@ -209,7 +215,7 @@ class TestHypothesisPlot:
       assert bool(ax.get_legend()) == (ax.get_title() == 'lr'), str(
           ax.get_title())
     # https://matplotlib.org/3.2.1/api/_as_gen/matplotlib.pyplot.legend.html
-    assert ax.get_legend()._loc in (10, 'center')
+    assert ax.get_legend()._loc in (10, 'center')  # type: ignore
 
     # Custom override with labels=... argument
     g = hypothesis.plot()
@@ -225,8 +231,8 @@ class TestHypothesisPlot:
     # show individual runs
     g = hypothesis.plot(x='step', y=['loss', 'accuracy'], rolling=10)
     assert len(g['accuracy'].get_lines()) == 1 + len(hypothesis.runs)
-    for l in g['accuracy'].get_lines():
-      assert l.get_xdata().max() >= 9900
+    for line in g['accuracy'].get_lines():
+      assert line.get_xdata().max() >= 9900
 
     # fill 1-std range.
     # TODO: validate color, alpha, etc.
@@ -242,7 +248,7 @@ class TestHypothesisPlot:
     """Tests plot(err_fn=...)"""
 
     def err_fn(h: Hypothesis) -> pd.DataFrame:
-      return h.grouped.std().applymap(lambda x: 5000)
+      return cast(pd.DataFrame, h.grouped.std()).applymap(lambda x: 5000)
 
     # without interpolation
     g = hypothesis.plot(x='step', y='loss', err_style='fill', err_fn=err_fn)
@@ -280,11 +286,11 @@ class TestExperimentPlot:
     for y in ('a', 'b0', 'b1'):
       assert g[y].get_title() == y
 
-    with pytest.raises(ValueError) as ex:
+    with pytest.raises(ValueError) as e:
       g['b']
-    assert 'Unknown index: b' in V(str(ex.value))
-    assert "['b1', 'b0']" in str(ex.value) or \
-           "['b0', 'b1']" in str(ex.value)
+    assert 'Unknown index: b' in V(str(e.value))
+    assert "['b1', 'b0']" in str(e.value) or \
+           "['b0', 'b1']" in str(e.value)
 
     # __getitem__ (int)
     assert g[0] is g.axes_active[0]

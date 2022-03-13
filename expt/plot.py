@@ -4,7 +4,7 @@ import difflib
 import itertools
 import warnings
 from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
-                    Tuple, TypeVar, Union)
+                    Tuple, TypeVar, Union, cast, overload)
 
 import matplotlib.ticker
 import numpy as np
@@ -91,9 +91,8 @@ class GridPlot:
     else:
       raise ValueError("If fig is given, axes should be given as well")
 
-    self._fig: Figure = fig  # type: ignore
-    self._axes: np.ndarray = axes  # type: ignore
-    assert self._axes is not None
+    self._fig = cast(Figure, fig)
+    self._axes = cast(np.ndarray, axes)
 
     for yi, ax in zip(self._y_names, self.axes_active):
       ax.set_title(yi)
@@ -132,6 +131,13 @@ class GridPlot:
     """Return a flattened ndarray of inactive subplots, whose length
     equals `prod(self.axes.shape) - self.n_plots`."""
     return self.axes.flat[self.n_plots:]
+
+  # yapf: disable
+  @overload
+  def __getitem__(self, key: str) -> Axes: ...
+  @overload
+  def __getitem__(self, key: int) -> Axes: ...
+  # yapf: enable
 
   def __getitem__(self, key) -> Union[Axes, np.ndarray]:
     # Note: see add_legend(ax) as well
@@ -347,10 +353,10 @@ class HypothesisPlotter:
     else:
       # might have different x values --- we need to interpolate.
       # (i) check if the x-column is consistent?
-      if n_samples is None and np.any(
-          self._parent.grouped.nunique()[kwargs['x']] > 1):
+      x = kwargs['x']
+      if n_samples is None and np.any(self._parent.grouped.nunique()[x] > 1):
         warnings.warn(
-            f"The x value (column `{kwargs['x']}`) is not consistent "
+            f"The x value (column `{x}`) is not consistent "
             "over different runs. Automatically falling back to the "
             "subsampling and interpolation mode (n_samples=10000). "
             "Explicitly setting the `n_samples` parameter is strongly "
@@ -377,6 +383,7 @@ class HypothesisPlotter:
     # at a different period. We fill in the missing values.
     mean = mean.interpolate()  # type: ignore
     std = std.interpolate()  # type: ignore
+    assert mean is not None and std is not None
 
     # determine which columns to draw (i.e. y) before smoothing.
     # should only include numerical values
@@ -399,7 +406,9 @@ class HypothesisPlotter:
         return False
 
       # unknown column in the DataFrame
-      if col_name not in mean.dtypes:
+      assert mean is not None
+      dtypes = mean.dtypes.to_dict()  # type: ignore
+      if col_name not in dtypes:
         if ignore_unknown:
           return False  # just ignore, no error
         else:
@@ -408,7 +417,7 @@ class HypothesisPlotter:
                            "Use ignore_unknown=True to ignore unknown columns.")
 
       # include only numeric values (integer or float)
-      if not (mean.dtypes[col_name].kind in ('i', 'f')):
+      if not (dtypes[col_name].kind in ('i', 'f')):
         return False
       return True
 
@@ -424,8 +433,8 @@ class HypothesisPlotter:
 
     return self._do_plot(
         y,
-        mean,
-        std,
+        mean,  # type: ignore
+        std,  # type: ignore
         _h_interpolated=_h_interpolated,
         n_samples=n_samples,
         subplots=subplots,
@@ -439,7 +448,7 @@ class HypothesisPlotter:
         grid=grid,
         ax=ax,
         tight_layout=tight_layout,
-        args=args,
+        args=args,  # type: ignore
         kwargs=kwargs)  # type: ignore
 
   def _validate_ax_with_y(self, ax, y):
@@ -544,6 +553,7 @@ class HypothesisPlotter:
     if err_style in ('band', 'fill'):
       # show shadowed range of 1-std errors
       for ax, yi in zip(np.asarray(axes).flat, y):
+        ax = cast(Axes, ax)
         mean_line = ax.get_lines()[-1]
         x = kwargs.get('x', None)
         x_values = mean[x].values if x else mean[yi].index
@@ -556,6 +566,7 @@ class HypothesisPlotter:
     elif err_style in ('runs', 'unit_traces') and len(self.runs) > 1:
       # show individual runs
       for ax, yi in zip(np.asarray(axes).flat, y):
+        ax = cast(Axes, ax)
         x = kwargs.get('x', None)
         color = ax.get_lines()[-1].get_color()
 
@@ -565,7 +576,7 @@ class HypothesisPlotter:
           df_individuals = self._dataframes
 
         for df in df_individuals:
-          if not yi in df:
+          if yi not in df:
             continue
           if rolling:
             df = df.rolling(rolling, min_periods=1,
@@ -578,11 +589,13 @@ class HypothesisPlotter:
     # TODO: Fix the name conflict.
     if kwargs.get('grid', True):  # this is always true?
       for ax in grid.axes_active:
+        ax = cast(Axes, ax)
         ax.grid(which='both', alpha=0.5)
 
     # after data is available, configure x axis
     if kwargs.get('xaxis_formatter', True):
       for ax in grid.axes_active:
+        ax = cast(Axes, ax)
         autoformat_xaxis(ax)
 
     # Add legend by default
@@ -789,7 +802,7 @@ class ExperimentPlotter:
       kwargs['y'] = y
 
     # Line style for each hypothesis.
-    axes_cycle = matplotlib.rcParams['axes.prop_cycle']()
+    axes_cycle = matplotlib.rcParams['axes.prop_cycle']()  # type: ignore
     axes_props = list(itertools.islice(axes_cycle, len(self._hypotheses)))
     for key in list(axes_props[0].keys()):
       # explicit kwargs passed to plot() should take a precedence.

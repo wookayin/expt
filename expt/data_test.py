@@ -109,7 +109,7 @@ class TestRunList(_TestBase):
 
     # invalid argument (fn)
     with pytest.raises(TypeError):
-      runs.filter([lambda run: True])
+      runs.filter([lambda run: True])  # type: ignore
 
     # filter by string (special case)
     filtered = V(runs.filter("r1*"))  # 1, 10-15
@@ -176,7 +176,7 @@ class TestRunList(_TestBase):
     assert 'seed' in df.columns
 
     np.testing.assert_array_equal(df['name'], [r.name for r in runs])
-    np.testing.assert_array_equal(df['run'], list(runs))
+    np.testing.assert_array_equal(df['run'], list(runs))  # type: ignore
 
 
 class TestHypothesis(_TestBase):
