@@ -41,6 +41,54 @@ def matplotlib_rcparams(kwargs: dict):
       matplotlib.rcParams[k] = old_values[k]
 
 
+# -----------------------------------------------------------------------------
+# Fixtures
+
+
+@pytest.fixture
+def hypothesis() -> Hypothesis:
+  """Make a sample Hypothesis."""
+
+  def _make_data(max_accuracy=1.0):
+    data = dict()
+    data['step'] = np.arange(10, 10000 + 10, 10)
+    data['loss'] = np.exp((-data['step'] + 700) / 1000.0)
+    data['loss'] += np.random.normal(0, 0.1, size=1000)
+    data['accuracy'] = (data['step'] / data['step'].max()) * max_accuracy
+    data['lr'] = np.ones(1000) * 0.001
+    return data
+
+  runs = [
+      Run("seed0", pd.DataFrame(_make_data(max_accuracy=0.9))),
+      Run("seed1", pd.DataFrame(_make_data(max_accuracy=1.0))),
+  ]
+  h = Hypothesis(name="hypo_plot", runs=runs)
+  return h
+
+
+@pytest.fixture(name="ex")
+def experiment() -> Experiment:
+  """Make a sample experiment."""
+
+  # Note different column names (some are shared, some are not)
+  h0 = Hypothesis("hyp0",
+                  Run('r0', pd.DataFrame({
+                      "a": [1, 2, 3],
+                      "b0": [10, 9, 8]
+                  })))
+  h1 = Hypothesis("hyp1",
+                  Run('r1', pd.DataFrame({
+                      "a": [4, 5, 6],
+                      "b1": [7, 6, 5]
+                  })))
+  ex = Experiment(name="ex", hypotheses=[h0, h1])
+  return ex
+
+
+# -----------------------------------------------------------------------------
+# Tests
+
+
 class TestGridPlot:
 
   def test_layout(self):
@@ -71,30 +119,9 @@ class TestHypothesisPlot:
   def teardown_method(self, method):
     plt.close("all")
 
-  @staticmethod
-  def _fixture() -> Hypothesis:
-
-    def _make_data(max_accuracy=1.0):
-      data = dict()
-      data['step'] = np.arange(10, 10000 + 10, 10)
-      data['loss'] = np.exp((-data['step'] + 700) / 1000.0)
-      data['loss'] += np.random.normal(0, 0.1, size=1000)
-      data['accuracy'] = (data['step'] / data['step'].max()) * max_accuracy
-      data['lr'] = np.ones(1000) * 0.001
-      return data
-
-    runs = [
-        Run("seed0", pd.DataFrame(_make_data(max_accuracy=0.9))),
-        Run("seed1", pd.DataFrame(_make_data(max_accuracy=1.0))),
-    ]
-    h = Hypothesis(name="hypo_plot", runs=runs)
-    return h
-
   # TODO: This test suite is incomplete. Add more tests.
 
-  def test_grid_spec(self):
-    hypothesis = self._fixture()
-
+  def test_grid_spec(self, hypothesis: Hypothesis):
     # single y
     g = hypothesis.plot(y="loss")
     assert V(g.axes.shape) == (1, 1)
@@ -109,9 +136,7 @@ class TestHypothesisPlot:
     assert V(g.axes.shape) == (2, 2)
     assert V(g.axes_active.shape) == (3,)
 
-  def test_when_fig_axes_are_given(self):
-    hypothesis = self._fixture()
-
+  def test_when_fig_axes_are_given(self, hypothesis: Hypothesis):
     # single y given a single axesplot
     fig, ax = plt.subplots()
     g = hypothesis.plot(y="loss", ax=ax)
@@ -139,9 +164,7 @@ class TestHypothesisPlot:
     assert g.axes_active[0] is axes.flat[0]
     assert g.axes_active[1] is axes.flat[1]
 
-  def test_suptitle(self):
-    hypothesis = self._fixture()
-
+  def test_suptitle(self, hypothesis: Hypothesis):
     # when given, it should be set
     g = hypothesis.plot(suptitle="super!")
     assert g.fig._suptitle.get_text() == "super!"
@@ -159,9 +182,7 @@ class TestHypothesisPlot:
     g = hypothesis.plot(grid=g, y='loss')
     assert g.fig._suptitle is None or g.fig._suptitle.get_text() == ""
 
-  def test_single_hypothesis_legend(self):
-    hypothesis = self._fixture()
-
+  def test_single_hypothesis_legend(self, hypothesis: Hypothesis):
     # default behavior: no legend
     g = hypothesis.plot()
     assert g.figure.legends == []
@@ -200,9 +221,7 @@ class TestHypothesisPlot:
     with pytest.raises(ValueError, match='should have length'):
       g.add_legend(ax=0, labels=["custom label", "too many args"])
 
-  def test_error_range_averaging(self):
-    hypothesis = self._fixture()
-
+  def test_error_range_averaging(self, hypothesis: Hypothesis):
     # show individual runs
     g = hypothesis.plot(x='step', y=['loss', 'accuracy'], rolling=10)
     assert len(g['accuracy'].get_lines()) == 1 + len(hypothesis.runs)
@@ -219,9 +238,8 @@ class TestHypothesisPlot:
 
     # TODO: what if some runs are truncated?
 
-  def test_error_range_custom_fn(self):
+  def test_error_range_custom_fn(self, hypothesis: Hypothesis):
     """Tests plot(err_fn=...)"""
-    hypothesis = self._fixture()
 
     def err_fn(h: Hypothesis) -> pd.DataFrame:
       return h.grouped.std().applymap(lambda x: 5000)
@@ -246,24 +264,8 @@ class TestExperimentPlot:
   def setup_method(self, method):
     sys.stdout.write("\n")
 
-  @staticmethod
-  def _fixture() -> Experiment:
-    # Note different column names (some are shared, some are not)
-    h0 = Hypothesis("hyp0",
-                    Run('r0', pd.DataFrame({
-                        "a": [1, 2, 3],
-                        "b0": [10, 9, 8]
-                    })))
-    h1 = Hypothesis("hyp1",
-                    Run('r1', pd.DataFrame({
-                        "a": [4, 5, 6],
-                        "b1": [7, 6, 5]
-                    })))
-    ex = Experiment(name="ex", hypotheses=[h0, h1])
-    return ex
-
-  def test_gridplot_basic(self):  # TODO: Add more complex scenario.
-    ex = self._fixture()
+  def test_gridplot_basic(self, ex: Experiment):
+    # TODO: Add more complex scenario.
 
     # plot all known columns
     g = V(ex.plot())
@@ -291,16 +293,14 @@ class TestExperimentPlot:
 
   # we can reuse the same test suite,
   # replacing `hypothesis` with `ex` (backed by self._fixture())
-  # TODO: Use inheritance.
-  def test_when_fig_axes_are_given(self):
-    TestHypothesisPlot.test_when_fig_axes_are_given(self)  # type: ignore
+  # TODO: Use inheritance and avoid wrong types.
+  def test_when_fig_axes_are_given(self, ex: Experiment):
+    TestHypothesisPlot.test_when_fig_axes_are_given(self, ex)  # type: ignore
 
-  def test_suptitle(self):
-    TestHypothesisPlot.test_suptitle(self)  # type: ignore
+  def test_suptitle(self, ex: Experiment):
+    TestHypothesisPlot.test_suptitle(self, ex)  # type: ignore
 
-  def test_multi_hypothesis_legend(self):
-    ex = self._fixture()
-
+  def test_multi_hypothesis_legend(self, ex: Experiment):
     # default behavior: a legend on the first subplot (assume >1 subplots)
     g = ex.plot()
     assert g.figure.legends == []
@@ -342,9 +342,8 @@ class TestExperimentPlot:
     for ax in g.axes_active:
       assert ax.get_legend() is None
 
-  def test_color_kwargs(self):
+  def test_color_kwargs(self, ex: Experiment):
     import cycler
-    ex = self._fixture()
     assert len(ex.hypotheses) == 2
 
     # Given kwargs
