@@ -14,13 +14,12 @@ from matplotlib.figure import Figure
 from pandas.core.groupby.generic import DataFrameGroupBy
 
 from . import util
+from .data import Experiment, Hypothesis, Run
 
 # yapf: disable
 warnings.filterwarnings("ignore", category=UserWarning,
                         message='Creating legend with loc="best"')
 # yapf: enable
-
-Hypothesis = 'expt.data.Hypothesis'  # expt.data.Hypothesis
 
 
 class GridPlot:
@@ -194,6 +193,7 @@ class GridPlot:
       kwargs: Additional kwargs passed to ax.legend().
           e.g., ncol=4
     """
+    target: Union[Figure, Axes]
     if ax is None:
       # automatic: figure legend or the (unique) axes
       if self.n_plots >= 2:
@@ -202,7 +202,7 @@ class GridPlot:
         target = self.axes_active[0]
     else:
       if isinstance(ax, (int, str)):  # see __getitem__
-        target = self[ax]
+        target = self[ax]  # type: ignore
       else:
         target = ax
 
@@ -224,7 +224,7 @@ class GridPlot:
     """Collect all legend labels from the subplot axes."""
     legend_labels = dict()
     for ax in self.axes_active:
-      for handle, label in zip(*ax.get_legend_handles_labels()):
+      for handle, label in zip(*ax.get_legend_handles_labels()):  # type: ignore
         if label in legend_labels:
           # TODO: Add warning/exception if color conflict is found
           pass
@@ -237,6 +237,9 @@ class HypothesisPlotter:
 
   def __init__(self, hypothesis: Hypothesis):  # type: ignore
     self._parent = hypothesis
+
+  def __repr__(self):
+    return "<HypothesisPlotter<{}>".format(self._parent)
 
   @property
   def name(self):
@@ -601,12 +604,16 @@ class HypothesisPlotter:
 
 class HypothesisHvPlotter(HypothesisPlotter):
 
+  def __repr__(self):
+    return "<HypothesisHvPlotter<{}>".format(self._parent)
+
   def _do_plot(
       self,
       y: List[str],
       mean: pd.DataFrame,
       std: pd.DataFrame,
       *,
+      _h_interpolated: Optional[Hypothesis] = None,
       n_samples: Optional[int],
       subplots: bool,
       rolling: Optional[int],
@@ -712,15 +719,18 @@ class HypothesisHvPlotter(HypothesisPlotter):
 
 class ExperimentPlotter:
 
-  def __init__(self, experiment: 'Experiment'):
+  def __init__(self, experiment: Experiment):
     self._parent = experiment
+
+  def __repr__(self):
+    return "<ExperimentPlotter<{}>".format(self._parent)
 
   @property
   def _hypotheses(self):
     return self._parent._hypotheses
 
   @property
-  def _columns(self) -> List[str]:
+  def _columns(self) -> Iterable[str]:
     return self._parent.columns
 
   DEFAULT_LEGEND_SPEC = dict(loc='upper left', bbox_to_anchor=(1.03, 1))

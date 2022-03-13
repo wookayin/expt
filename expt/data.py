@@ -30,18 +30,17 @@ import os.path
 import re
 import types
 from dataclasses import dataclass  # for python 3.6, backport needed
-from typing import (Any, Callable, Dict, Iterable, Iterator, List, Mapping,
-                    MutableMapping, Optional, Sequence, Tuple, TypeVar, Union,
-                    overload)
+from importlib import import_module as _import
+from typing import (TYPE_CHECKING, Any, Callable, Dict, Iterable, Iterator,
+                    List, Mapping, MutableMapping, Optional, Sequence, Tuple,
+                    TypeVar, Union, overload)
 
 import numpy as np
 import pandas as pd
-from pandas.core.accessor import CachedAccessor
 from pandas.core.groupby.generic import DataFrameGroupBy
 from scipy import interpolate
 from typeguard import typechecked
 
-from . import plot as _plot
 from . import util
 
 T = TypeVar('T')
@@ -320,12 +319,15 @@ class Hypothesis(Iterable[Run]):
     """Return a DataFrame that summarizes the current hypothesis."""
     return Experiment(self.name, [self]).summary()
 
-  # see module expt.plot
-  plot = CachedAccessor("plot", _plot.HypothesisPlotter)
-  plot.__doc__ = _plot.HypothesisPlotter.__doc__
+  if TYPE_CHECKING:  # Provide type hint and documentation for static checker.
+    import expt.plot
+    plot: Callable[..., expt.plot.GridPlot]
+    hvplot: Callable[..., 'holoviews.core.layout.NdLayout']  # type: ignore
 
-  hvplot = CachedAccessor("hvplot", _plot.HypothesisHvPlotter)
-  hvplot.__doc__ = _plot.HypothesisHvPlotter.__doc__
+  plot = util.PropertyAccessor(  # type: ignore
+      "plot", lambda self: _import("expt.plot").HypothesisPlotter(self))
+  hvplot = util.PropertyAccessor(  # type: ignore
+      "hvplot", lambda self: _import("expt.plot").HypothesisHvPlotter(self))
 
   @property
   def grouped(self) -> DataFrameGroupBy:
@@ -800,8 +802,12 @@ class Experiment(Iterable[Hypothesis]):
       plot = (plot * p) if plot else p
     return plot
 
-  plot = CachedAccessor("plot", _plot.ExperimentPlotter)
-  plot.__doc__ = _plot.ExperimentPlotter.__doc__
+  if TYPE_CHECKING:  # Provide type hint and documentation for static checker.
+    import expt.plot
+    plot: Callable[..., expt.plot.GridPlot]  # see HypothesisPlotter
+
+  plot = util.PropertyAccessor(  # type: ignore
+      "plot", lambda self: _import("expt.plot").ExperimentPlotter(self))
 
 
 __all__ = (

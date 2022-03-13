@@ -227,6 +227,11 @@ class TestHypothesis(_TestBase):
     assert h.name == 'generator'
     assert len(h) == 3
 
+  def test_plot_method(self):
+    import expt.plot
+    h = Hypothesis("h", [])
+    assert h.plot.__doc__ == expt.plot.HypothesisPlotter.__doc__
+
   def test_properties(self):
     # test gropued, columns, mean, std, min, max, etc.
     pass
@@ -400,6 +405,11 @@ class TestExperiment(_TestBase):
       ex.select_top("score", k=0)
     with pytest.raises(ValueError, match='k must be smaller than the number of hypotheses'):  # yapf: disable
       ex.select_top("score", k=6)
+
+  def test_plot_method(self):
+    import expt.plot
+    ex = Experiment("ex", [])
+    assert ex.plot.__doc__ == expt.plot.ExperimentPlotter.__doc__
 
 
 if __name__ == '__main__':

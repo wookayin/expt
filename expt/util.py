@@ -7,6 +7,21 @@ from typing import List
 from typeguard import typechecked
 
 
+class PropertyAccessor:
+  """A property-like object."""
+
+  def __init__(self, name: str, accessor):
+    self._name = name
+    self._accessor = accessor
+
+  def __get__(self, obj, cls):
+    if obj is None:
+      return self._accessor
+    accessor_obj = self._accessor(obj)
+    object.__setattr__(obj, self._name, accessor_obj)
+    return accessor_obj
+
+
 @typechecked
 def prettify_labels(labels: List[str]) -> List[str]:
   """Apply a sensible default so that the plot does not look ugly."""
