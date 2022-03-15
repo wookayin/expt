@@ -730,6 +730,26 @@ class HypothesisHvPlotter(HypothesisPlotter):
     return p
 
 
+class LegendSpec(dict):
+  """A frozen contianer that holds keyward arguments to matplotlib.legend()."""
+
+  def __repr__(self):
+    return f"LegendSpec({super().__repr__()})"
+
+  def _immutable(self, *args, **kwargs):
+    raise RuntimeError("LegendSpec is a frozen dictionary.")
+
+  __setitem__ = __delitem__ = pop = popitem = _immutable
+  clear = setdefault = _immutable  # type: ignore
+
+  def __call__(self, **kwargs) -> 'LegendSpec':
+    # Return an updated copy if it is called.
+    return LegendSpec({**self, **kwargs})
+
+  update = __call__  # type: ignore
+  with_ = __call__
+
+
 class ExperimentPlotter:
 
   def __init__(self, experiment: Experiment):
@@ -746,22 +766,43 @@ class ExperimentPlotter:
   def _columns(self) -> Iterable[str]:
     return self._parent.columns
 
-  DEFAULT_LEGEND_SPEC = dict(loc='upper left', bbox_to_anchor=(1.03, 1))
+  class LegendPreset:
+    """Some commonly-used configurations for placing legend.
 
-  def _determine_default_legend_spec(self, labels: List[str]):
-    # Put a legend on the right side of the figure (outside the grid),
-    # or on the first axes if #hypothesis is small enough (<=5)
-    if len(labels) > 5:
-      return self.DEFAULT_LEGEND_SPEC
-    if any(len(l) > 20 for l in labels):
-      return self.DEFAULT_LEGEND_SPEC
-    return dict(ax=0)
+    See the documentation of matplotlib.legend().
+    """
+    FIRST_AXIS = LegendSpec(ax=0)
+    RIGHT = LegendSpec(loc='upper left', bbox_to_anchor=(1.03, 0.95), ncol=1)
+    BOTTOM = LegendSpec(loc='upper center', bbox_to_anchor=(0.5, 0.0), ncol=4)
+    TOP = LegendSpec(loc='lower center', bbox_to_anchor=(0.5, 0.95), ncol=4)
+
+    @classmethod
+    def AUTO(cls, labels: List[str]):
+      """Default, automatic behavior of placing the legend.
+
+      Put a legend on the right side of the figure (outside the grid),
+      or on the first axes if #hypothesis is small enough (<=5).
+      """
+      # only one: put in the upper center like a title.
+      if len(labels) == 1:
+        return cls.TOP
+
+      # It can be lengthy; Use side layout on the right.
+      if len(labels) > 5 or any(len(label) > 20 for label in labels):
+        return cls.RIGHT
+
+      # compact enough; show in the first axes.
+      return cls.FIRST_AXIS
+
+    def __new__(cls):
+      raise TypeError("This class cannot be instantiated.")
 
   def __call__(
       self,
       *args,
       suptitle: Optional[str] = None,
-      legend: Union[bool, int, str, Dict[str, Any]] = DEFAULT_LEGEND_SPEC,
+      legend: Union[bool, int, str, Dict[str, Any], Callable[[List[str]], Any],
+                    LegendSpec] = LegendPreset.AUTO,
       grid=None,
       colors=None,
       tight_layout: Union[bool, Dict[str, Any]] = True,
@@ -775,7 +816,7 @@ class ExperimentPlotter:
       subplots:
       y: (Str, Iterable[Str])
       suptitle (str):
-      legend (bool or dict): Whether to put legend on the GridPlot.
+      legend: Whether or how to put legend of hypothesis names on the GridPlot.
         - True: Put legend on every individual axes.
         - False: No legend on any individual axes.
         - dict: It will be passed as kwargs to GridPlot.add_legend().
@@ -788,6 +829,9 @@ class ExperimentPlotter:
                put a large legend on the figure (e.g., above the title)
         - int: Have a same meaning as dict(ax=...).
         - str: Have a same meaning as dict(ax=...).
+        - or a callable (List[str] -> ...), which dynamically determines
+          the argument value given a list of labels.
+        - (See also) ex.plot.LegendPreset for some common presets.
       colors: Iterable[Str]
     '''
     # Prepare kwargs for Hypothesis.plot().
@@ -829,9 +873,12 @@ class ExperimentPlotter:
     if kwargs.get('prettify_labels', False):
       hypothesis_labels = util.prettify_labels(hypothesis_labels)
 
-    # Legend (applies a sensible conditional default)
-    if legend == self.DEFAULT_LEGEND_SPEC:
-      legend = self._determine_default_legend_spec(hypothesis_labels)
+    # Legend (applies a sensible default)
+    if isinstance(legend, LegendSpec):
+      pass
+    elif callable(legend):
+      # resolve legend args on-the-fly.
+      legend = legend(hypothesis_labels)
 
     if not isinstance(legend, bool) and isinstance(legend, (int, str)):
       legend = dict(ax=legend)
