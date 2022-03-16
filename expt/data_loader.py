@@ -648,7 +648,8 @@ class RunLoader:
     the tqdm progress bar could be updated when shown as a jupyter widget.
     """
     pbar = tqdm(total=len(self._readers))
-    future = asyncio.create_task(self._get_runs_async(tqdm_bar=pbar, **kwargs))
+    loop = asyncio.get_event_loop()
+    future = loop.create_task(self._get_runs_async(tqdm_bar=pbar, **kwargs))
     while not future.done():
       await asyncio.sleep(polling_interval)
       pbar.update(0)
