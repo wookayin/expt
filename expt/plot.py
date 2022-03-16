@@ -281,7 +281,7 @@ class HypothesisPlotter:
                grid: Optional[GridPlot] = None,
                ax: Optional[Union[Axes, np.ndarray]] = None,
                tight_layout: bool = True,
-               **kwargs) -> GridPlot:
+               **kwargs) -> 'holoviews.core.layout.NdLayout':  # type: ignore
     '''Hypothesis.plot based on matplotlib.
 
     This can work in two different modes:

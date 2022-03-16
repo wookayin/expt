@@ -1,7 +1,7 @@
 """Tests for expt.plot"""
 import contextlib
 import sys
-from typing import cast
+from typing import List, cast
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -347,6 +347,39 @@ class TestExperimentPlot:
     assert g.figure.legends == []
     for ax in g.axes_active:
       assert ax.get_legend() is None
+
+    # callable
+    def _legend_fn(labels: List[str]):
+      assert labels == ["hyp0", "hyp1"]
+      return dict(ax='b0')
+
+    g = ex.plot(legend=_legend_fn)
+    assert g['b0'].get_legend()
+    assert g['b1'].get_legend() is None
+
+  def test_multi_hypothesis_legend_presets(self, ex: Experiment):
+    # Since it is difficult to validate the results visually,
+    # we will check the API calls only.
+    from matplotlib.legend import Legend
+
+    g = ex.plot(legend=ex.plot.LegendPreset.TOP)
+    assert g.figure.legends
+
+    g = ex.plot(legend=ex.plot.LegendPreset.RIGHT(ncol=1))
+    assert g.figure.legends
+
+    g = ex.plot(legend=ex.plot.LegendPreset.BOTTOM)
+    assert g.figure.legends
+
+    # Automatic placement: with two labels, placed on the first axis
+    g = ex.plot(legend=ex.plot.LegendPreset.AUTO)
+    assert g.figure.legends == []
+    assert g.axes_active[0].get_legend()
+
+    # Override LegendSpec
+    _ref = dict(loc='upper center', bbox_to_anchor=(0.5, 0.0), ncol=1)
+    assert ex.plot.LegendPreset.BOTTOM.with_(ncol=1) == _ref
+    assert ex.plot.LegendPreset.BOTTOM(ncol=1) == _ref
 
   def test_color_kwargs(self, ex: Experiment):
     import cycler

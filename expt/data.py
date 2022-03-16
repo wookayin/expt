@@ -328,8 +328,8 @@ class Hypothesis(Iterable[Run]):
 
   if TYPE_CHECKING:  # Provide type hint and documentation for static checker.
     import expt.plot
-    plot: Callable[..., expt.plot.GridPlot]
-    hvplot: Callable[..., 'holoviews.core.layout.NdLayout']  # type: ignore
+    plot: expt.plot.HypothesisPlotter
+    hvplot: expt.plot.HypothesisHvPlotter
 
   plot = util.PropertyAccessor(  # type: ignore
       "plot", lambda self: _import("expt.plot").HypothesisPlotter(self))
@@ -811,7 +811,7 @@ class Experiment(Iterable[Hypothesis]):
 
   if TYPE_CHECKING:  # Provide type hint and documentation for static checker.
     import expt.plot
-    plot: Callable[..., expt.plot.GridPlot]  # see HypothesisPlotter
+    plot: expt.plot.ExperimentPlotter
 
   plot = util.PropertyAccessor(  # type: ignore
       "plot", lambda self: _import("expt.plot").ExperimentPlotter(self))
