@@ -1,6 +1,7 @@
 """Data Loader for expt."""
 
 import abc
+import asyncio
 import atexit
 import dataclasses
 import functools
@@ -499,6 +500,12 @@ class RunLoader:
 
   def add_paths(self, *path_globs):
     for path_glob in path_globs:
+
+      if isinstance(path_glob, (list, tuple)):
+        self.add_paths(*path_glob)
+        continue
+
+      path_glob: str
       paths = list(sorted(path_util.glob(path_glob)))
       if self._verbose and not paths:
         print(f"Warning: a glob pattern '{path_glob}' "
@@ -539,7 +546,7 @@ class RunLoader:
       print(f"[!] {reader.log_dir} : {e}", file=sys.stderr, flush=True)
       return None, context
 
-  def get_runs(self, parallel=True) -> RunList:
+  def get_runs(self, parallel=True, *, tqdm_bar=None) -> RunList:
     """Refresh and get all the runs from all the log directories.
 
     This will work as incremental reading: the portion of data that was read
@@ -548,13 +555,19 @@ class RunLoader:
     if not self._readers:
       return RunList([])  # special case, no matches
 
+    # TODO: What if there is a new directory that matches the glob pattern
+    # but created *after* initialization of log readers? How to add them?
+
     # Reload the data (incrementally or read from scratch) and return runs.
     if self._pool is None or not parallel:
       return self._get_runs_serial()
 
     else:
       pool = self._pool
-      pbar = tqdm(total=1) if self._progress_bar else util.NoopTqdm()
+      if self._progress_bar:
+        pbar = tqdm(total=self._readers) if tqdm_bar is None else tqdm_bar
+      else:
+        pbar = util.NoopTqdm()
 
       def _pbar_callback_done(run):
         del run  # unused
@@ -623,6 +636,24 @@ class RunLoader:
       pbar.update(1)
 
     return RunList(runs)
+
+  # Asynchronous execution in a thread.
+  _get_runs_async = util.wrap_async(get_runs)
+
+  async def get_runs_async(self, polling_interval=0.5, **kwargs):
+    """Asynchronous version of get_runs().
+
+    This wraps get_runs() to be executed in a thread, so that the UI does not
+    block while the loader is fetching and processing runs. Specifically,
+    the tqdm progress bar could be updated when shown as a jupyter widget.
+    """
+    pbar = tqdm(total=len(self._readers))
+    future = asyncio.create_task(self._get_runs_async(tqdm_bar=pbar, **kwargs))
+    while not future.done():
+      await asyncio.sleep(polling_interval)
+      pbar.update(0)
+
+    return future.result()
 
 
 __all__ = (

@@ -1,8 +1,11 @@
 """Utilities for expt."""
 
+import asyncio
 import collections
+import concurrent.futures
 import contextlib
-from typing import List
+import functools
+from typing import Callable, List, Optional
 
 from typeguard import typechecked
 
@@ -70,3 +73,20 @@ def timer(name=""):
   yield
   _end = time.time()
   print("[%s] Elapsed time : %.3f sec" % (name, _end - _start))
+
+
+def wrap_async(blocking_fn: Callable):
+  """A wrapper that wraps a synchronous function into an asynchornous
+  function."""
+
+  executor = concurrent.futures.ThreadPoolExecutor()
+
+  @functools.wraps(blocking_fn)
+  async def wrapped(*args, **kwargs):
+    loop = asyncio.get_event_loop()
+    func = functools.partial(blocking_fn, *args, **kwargs)
+    result = await loop.run_in_executor(executor, func)
+    return result
+
+  wrapped._executor = executor
+  return wrapped
