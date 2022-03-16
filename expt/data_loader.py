@@ -565,7 +565,7 @@ class RunLoader:
     else:
       pool = self._pool
       if self._progress_bar:
-        pbar = tqdm(total=self._readers) if tqdm_bar is None else tqdm_bar
+        pbar = tqdm(total=len(self._readers)) if tqdm_bar is None else tqdm_bar
       else:
         pbar = util.NoopTqdm()
 

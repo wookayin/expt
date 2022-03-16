@@ -90,6 +90,7 @@ tests_requires = [
     'mock>=2.0.0',
     'pytest>=5.0',  # Python 3.5+
     'pytest-cov',
+    'pytest-asyncio',
     'tensorflow',
 ]
 

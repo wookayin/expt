@@ -176,6 +176,13 @@ class TestRunLoader:
       assert r.path == r2.path
       np.testing.assert_array_equal(r.df, r2.df)
 
+  @pytest.mark.asyncio
+  async def test_run_loader_async(self):
+    loader = data_loader.RunLoader(*self.paths)
+    runs = await loader.get_runs_async(parallel=False)
+    assert len(runs) == len(self.paths)
+    assert [r.path for r in runs] == [str(p) for p in self.paths]
+
 
 if __name__ == '__main__':
   sys.exit(pytest.main(["-s", "-v"] + sys.argv))
