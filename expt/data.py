@@ -129,6 +129,13 @@ class RunList(Sequence[Run]):
                       "but given {}".format([type(r) for r in runs]))
     return runs
 
+  # yapf: disable
+  @overload
+  def __getitem__(self, index_or_slice: int) -> Run: ...
+  @overload
+  def __getitem__(self, index_or_slice: slice) -> 'RunList': ...
+  # yapf: enable
+
   def __getitem__(self, index_or_slice) -> Union[Run, 'RunList']:
     o = self._runs[index_or_slice]
     if isinstance(index_or_slice, slice):
