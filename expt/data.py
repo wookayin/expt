@@ -45,6 +45,11 @@ from . import util
 
 T = TypeVar('T')
 
+# type checking issues with python < 3.7
+if not hasattr(re, 'Pattern') and not TYPE_CHECKING:
+  import typing
+  re.Pattern = typing.Pattern
+
 #########################################################################
 # Data Classes
 #########################################################################
@@ -228,7 +233,7 @@ class RunList(Sequence[Run]):
       fn = lambda run: bool(pat.search(run.name))
     return RunList(filter(fn, self._runs))
 
-  def grep(self, regex: Union[str, 're.Pattern'], flags=0):
+  def grep(self, regex: Union[str, re.Pattern], flags=0):
     """Apply a regex-based filter on the path of `Run`, and return the
     matched `Run`s as a RunList."""
     if isinstance(regex, str):
