@@ -45,15 +45,16 @@ def runs_gridsearch() -> RunList:
 class TestRun(_TestBase):
 
   def test_run_properties(self):
-    r = Run("/tmp/some-run",
-            pd.DataFrame({
-                "a": [1, 2, 3, 4],
-                "b": [5, 6, 7, 8],
-            }))
+    df = pd.DataFrame({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})
 
+    r = Run("/tmp/some-run", df=df)
     assert r.path == "/tmp/some-run"
     assert r.name == "some-run"
     assert list(r.columns) == ["a", "b"]
+
+    config = dict(learning_rate=0.1, seed=1)
+    r = Run("/tmp/some-run-with-config", df=df, config=config)
+    assert r.config == config
 
 
 class TestRunList(_TestBase):
@@ -166,7 +167,13 @@ class TestRunList(_TestBase):
 
   def test_to_dataframe(self, runs_gridsearch: RunList):
     runs = runs_gridsearch
+    runs[0].config = {'algorithm': 'ppo', 'some_key': 'some_value'}
 
+    # with run.config (default)
+    df = runs.to_dataframe()
+    assert list(df.columns) == ['name', 'algorithm', 'some_key', 'run']
+
+    # with custom config_fn
     def _config_fn(run: Run):
       algorithm, env, seed = run.name.split('-')
       return dict(algorithm=algorithm, env=env, seed=seed)
@@ -175,9 +182,7 @@ class TestRunList(_TestBase):
 
     # validate df
     print(df)
-    assert 'algorithm' in df.columns
-    assert 'env' in df.columns
-    assert 'seed' in df.columns
+    assert list(df.columns) == ['name', 'algorithm', 'env', 'seed', 'run']
 
     np.testing.assert_array_equal(df['name'], [r.name for r in runs])
     np.testing.assert_array_equal(df['run'], list(runs))  # type: ignore

@@ -49,14 +49,17 @@ T = TypeVar('T')
 # Data Classes
 #########################################################################
 
+RunConfig = Mapping[str, Any]
+
 
 @dataclass
 class Run:
   """Represents a single run, containing one pd.DataFrame object
-  as well as other metadata (path, etc.)
+  as well as other metadata (path, config, etc.)
   """
   path: str
   df: pd.DataFrame
+  config: Optional[RunConfig] = None
 
   @classmethod
   def of(cls, o):
@@ -160,21 +163,37 @@ class RunList(Sequence[Run]):
     """Create a new copy of list containing all the runs."""
     return list(self._runs)
 
-  def to_dataframe(self, config_fn=None) -> pd.DataFrame:
+  def to_dataframe(
+      self,
+      include_config: bool = True,
+      config_fn: Optional[Callable[[Run], RunConfig]] = None,
+  ) -> pd.DataFrame:
     """Return a DataFrame of runs, with of columns `name` and `run`
     (plus some extra columns as per config_fn).
 
     Args:
-      config_fn: If given, this should be a function that takes a Run
-        and returns Dict[str, number]. Additional series will be added
-        to the dataframe from the result of this function.
+      include_config: If True (default), the dataframe will include
+        additional series will be added as index or normal columns.
+      config_fn: A function that returns the config dict (mapping) for each
+        run. This should be a function that takes a Run as the sole argument
+        and returns Dict[str, number]. If not given (or None),
+        `run.config` will be used instead.
     """
     df = pd.DataFrame({
         'name': [r.name for r in self._runs],
         'run': self._runs,
     })
 
-    if config_fn:
+    if include_config:
+      if config_fn is None:
+
+        def _default_config_fn(run: Run) -> RunConfig:
+          if run.config is not None:
+            return run.config
+          return {}
+
+        config_fn = _default_config_fn
+
       for i, run in enumerate(self._runs):
         config: Mapping[str, Any] = config_fn(run)
         if not isinstance(config, Mapping):

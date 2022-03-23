@@ -20,8 +20,8 @@ import multiprocess.pool
 import numpy as np
 import pandas as pd
 
-from . import path_util, util
-from .data import Experiment, Hypothesis, Run, RunList
+from expt import path_util, util
+from expt.data import Experiment, Hypothesis, Run, RunList
 
 try:
   from tqdm.auto import tqdm
