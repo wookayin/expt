@@ -189,13 +189,24 @@ class RunList(Sequence[Run]):
     df.insert(len(df.columns) - 1, 'run', df.pop('run'))
     return df
 
-  def filter(self, fn: Union[Callable[[Run], bool], str]) -> 'RunList':
-    """Apply a filter function (Run -> bool) and return the filtered runs
-    as another RunList. If a string is given, we convert it as a matcher
-    function (see fnmatch) that matches `run.name`."""
+  def filter(self, fn: Union[Callable[[Run], bool], str,
+                             re.Pattern]) -> 'RunList':
+    """Apply a filter and return the filtered runs as another RunList.
+
+    The filter is a function (Run -> bool). Only runs that evaluates this
+    function as True will be selected.
+
+    As a special case, if a string is given as an argument, we will use it
+    as the pattern for fnmatch. This can be useful for filtering runs by name.
+    If a regex Pattern (re.compile) is given, all the runs whose name matches
+    the pattern in part (via re.search) will be selected.
+    """
     if isinstance(fn, str):
       pat = str(fn)
       fn = lambda run: fnmatch.fnmatch(run.name, pat)
+    elif isinstance(fn, re.Pattern):
+      pat = fn
+      fn = lambda run: bool(pat.search(run.name))
     return RunList(filter(fn, self._runs))
 
   def grep(self, regex: Union[str, 're.Pattern'], flags=0):

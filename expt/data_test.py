@@ -88,7 +88,7 @@ class TestRunList(_TestBase):
     assert len(runs) == 3
 
   def test_slice(self):
-    runs = self._fixture()
+    runs = self._fixture()  # [r0 ... r15]
 
     # slice (sublist) should be a RunList
     o = V(runs[:5])
@@ -114,6 +114,10 @@ class TestRunList(_TestBase):
     # filter by string (special case)
     filtered = V(runs.filter("r1*"))  # 1, 10-15
     assert len(filtered) == 7
+
+    # filter by regex (search, not match)
+    filtered = V(runs.filter(re.compile("(1|2)$")))
+    assert [r.name for r in filtered] == ['r1', 'r2', 'r11', 'r12']
 
   def test_grep(self):
     runs = self._fixture()
