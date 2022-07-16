@@ -92,6 +92,7 @@ class TestRunList(_TestBase):
     runs = self._fixture()  # [r0 ... r15]
 
     # slice (sublist) should be a RunList
+    # pylint: disable=not-an-iterable
     o = V(runs[:5])
     assert isinstance(o, RunList)
     assert [r.name for r in o] == ["r0", "r1", "r2", "r3", "r4"]
@@ -99,6 +100,7 @@ class TestRunList(_TestBase):
     o = V(runs[-2:5:-2])
     assert isinstance(o, RunList)
     assert [r.name for r in o] == ["r14", "r12", "r10", "r8", "r6"]
+    # pylint: enable=not-an-iterable
 
   def test_filter(self):
     runs = self._fixture()
@@ -348,6 +350,7 @@ class TestExperiment(_TestBase):
     assert len(ex.hypotheses) == 6
 
   def test_indexing(self):
+    # pylint: disable=unsubscriptable-object
     h0 = Hypothesis("hyp0", Run('r0', pd.DataFrame({"a": [1, 2, 3]})))
     h1 = Hypothesis("hyp1", Run('r1', pd.DataFrame({"a": [4, 5, 6]})))
 
@@ -387,6 +390,7 @@ class TestExperiment(_TestBase):
 
     with pytest.raises(NotImplementedError):  # TODO
       r = V(ex[['hyp1', 'hyp0'], 'a'])
+    # pylint: enable=unsubscriptable-object
 
   def test_select_top(self):
     # yapf: disable
