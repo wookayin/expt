@@ -1,7 +1,7 @@
 """Tests for expt.plot"""
 import contextlib
 import sys
-from typing import List, cast
+from typing import List, Tuple, cast
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -43,6 +43,7 @@ def matplotlib_rcparams(kwargs: dict):
 
 # -----------------------------------------------------------------------------
 # Fixtures
+# pylint: disable=redefined-outer-name
 
 
 @pytest.fixture
@@ -247,8 +248,12 @@ class TestHypothesisPlot:
   def test_error_range_custom_fn(self, hypothesis: Hypothesis):
     """Tests plot(err_fn=...)"""
 
+    # Case 1: err_fn returns a single DataFrame.
+    # ------------------------------------------
     def err_fn(h: Hypothesis) -> pd.DataFrame:
-      return cast(pd.DataFrame, h.grouped.std()).applymap(lambda x: 5000)
+      df: pd.DataFrame = h.grouped.mean()
+      df['loss'][:] = 5000
+      return df
 
     # without interpolation
     g = hypothesis.plot(x='step', y='loss', err_style='fill', err_fn=err_fn)
@@ -263,6 +268,52 @@ class TestHypothesisPlot:
     g = hypothesis.plot(
         x='step', y='loss', err_style='runs', n_samples=100,
         err_fn=err_fn)  # Note: with err_style='runs', err_fn is not useful..?
+
+    # Case 2: err_fn returns a tuple of two DataFrames.
+    # -------------------------------------------------
+    def err_fn2(h: Hypothesis) -> Tuple[pd.DataFrame, pd.DataFrame]:
+      df: pd.DataFrame = h.grouped.mean()
+      std: pd.DataFrame = h.grouped.sem()
+      return (df - std, df + std * 100000)
+
+    # without interpolation
+    g = hypothesis.plot(x='step', y='loss', err_style='fill', err_fn=err_fn2)
+    band = g['loss'].collections[0].get_paths()[0].vertices
+
+    # std is approximately 0.25 (0.25 * 100_000 ~= 25000)
+    assert -1 <= np.min(band[:, 1]) <= 0
+    assert 20000 <= np.max(band[:, 1]) <= 30000
+
+  def test_representative_custom_fn(self, hypothesis: Hypothesis):
+    """Tests plot(representative_fn=...)"""
+
+    def repr_fn(h: Hypothesis) -> pd.DataFrame:
+      # A dummy function that manipulates the representative value ('mean')
+      df: pd.DataFrame = h.grouped.mean()
+      df['loss'] = np.asarray(df.reset_index()['step']) * -1.0
+      return df
+
+    def _ensure_representative_curve(line):
+      assert line.get_alpha() is None
+      return line
+
+    # without interpolation
+    g = hypothesis.plot(x='step', y='loss', representative_fn=repr_fn)
+    line = _ensure_representative_curve(g['loss'].get_lines()[0])
+    np.testing.assert_array_equal(line.get_xdata() * -1, line.get_ydata())
+
+    # with interpolation
+    # yapf: disable
+    g = hypothesis.plot(x='step', y='loss', n_samples=100,
+                        representative_fn=repr_fn, err_style='fill')  # fill
+    line = _ensure_representative_curve(g['loss'].get_lines()[0])
+    np.testing.assert_array_equal(line.get_xdata() * -1, line.get_ydata())
+
+    g = hypothesis.plot(x='step', y='loss', n_samples=100,
+                        representative_fn=repr_fn, err_style='runs')  # runs
+    line = _ensure_representative_curve(g['loss'].get_lines()[0])
+    np.testing.assert_array_equal(line.get_xdata() * -1, line.get_ydata())
+    # yapf: enable
 
 
 class TestExperimentPlot:
