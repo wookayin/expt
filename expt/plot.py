@@ -21,6 +21,11 @@ warnings.filterwarnings("ignore", category=UserWarning,
                         message='Creating legend with loc="best"')
 # yapf: enable
 
+HypothesisSummaryFn = Callable[  # see HypothesisPlotter
+    [Hypothesis], pd.DataFrame]
+HypothesisSummaryErrFn = Callable[  # see HypothesisPlotter
+    [Hypothesis], Union[pd.DataFrame, Tuple[pd.DataFrame, pd.DataFrame]]]
+
 
 class GridPlot:
   """Multi-plot grid subplots.
@@ -269,7 +274,8 @@ class HypothesisPlotter:
                *args,
                subplots=True,
                err_style="runs",
-               err_fn: Optional[Callable[[Hypothesis], pd.DataFrame]] = None,
+               err_fn: Optional[HypothesisSummaryFn] = None,
+               representative_fn: Optional[HypothesisSummaryErrFn] = None,
                std_alpha=0.2,
                runs_alpha=0.2,
                n_samples=None,
@@ -309,13 +315,31 @@ class HypothesisPlotter:
             (i) runs, unit_traces: Show individual runs/traces (see runs_alpha)
             (ii) band, fill: Show as shaded area (see std_alpha)
             (iii) None or False: do not display any errors
-      - err_fn (Callable: Hypothesis -> pd.DataFrame):
-          A strategy to compute the standard error or deviation. This should
-          return the standard err results as a DataFrame, having the same
-          column and index as the hypothesis.
-          Defaults to "standard deviation.", i.e. `hypothoses.grouped.std()`.
-          To use standard error, use `err_fn=lambda h: h.grouped.sem()`.
-      - std_alpha (float): If not None, will show the 1-std range as a
+      - err_fn (Callable: Hypothesis -> pd.DataFrame | Tuple):
+          A strategy to compute the error range when err_style is band or fill.
+          Defaults to "standard deviation.", i.e. `hypothosis.grouped.std()`.
+          This function may return either:
+            (i) a single DataFrame, representing the standard error,
+              which must have the same column and index as the hypothesis; or
+            (ii) a tuple of two DataFrames, representing the error range
+              (lower, upper). Both DataFrames must also have the same
+              column and index as the hypothesis.
+          In the case of (i), we assume that a custom `representative_fn` is
+          NOT being used, but the representative value of the hypothesis is
+          the grouped mean of the Hypothesis, i.e., `hypothesis.mean()`.
+          (Example) To use standard error for the bands, you can use either
+          `err_fn=lambda h: h.grouped.sem()` or
+          `err_fn=lambda h: (h.grouped.mean() - h.grouped.sem(),
+                             h.grouped.mean() + h.grouped.sem())`.
+      - representative_fn (Callable: Hypothesis -> pd.DataFrame):
+          A strategy to compute the representative value (usually drawn
+          in a thicker line) when plotting.
+          This function should return a DataFrame that has the same column
+          and index as the hypothesis.
+          Defaults to "sample mean.", i.e., `hypothesis.mean()`
+          For instance, to use median instead of mean, use
+          `representative_fn=lambda h: h.grouped.median()`
+      - std_alpha (float): If not None, will show the error band as a
           shaded area. Defaults 0.2,
       - runs_alpha (float): If not None, will draw an individual line
           for each run. Defaults 0.2.
@@ -339,17 +363,50 @@ class HypothesisPlotter:
       # nothing to draw (no rows)
       raise ValueError("No data to plot, all runs have empty DataFrame.")
 
-    mean, std = None, None
-    _h_interpolated = None
+    def _representative_and_err(h: Hypothesis) -> Tuple[
+        pd.DataFrame,  # representative (mean)
+        Tuple[pd.DataFrame, pd.DataFrame]  # error band range (stderr)
+    ]:  # yapf: disable
+      """Evaluate representative_fn and err_fn."""
 
-    def _mean_and_err(h: Hypothesis):  # type: ignore
-      mean = h.grouped.mean()
+      representative = representative_fn(h) if representative_fn \
+                       else h.grouped.mean()   # noqa: E127
+      err_range: Tuple[pd.DataFrame, pd.DataFrame]
       std = err_fn(h) if err_fn else h.grouped.std()
-      return mean, std
+
+      # Condition check: when representative_fn is given,
+      # err_fn should return a range (i.e., tuple)
+      if representative_fn and err_fn and not isinstance(std, tuple):
+        raise ValueError(
+            "When representative_fn is given, err_fn must return a range "
+            "(tuple of pd.DataFrame) representing the lower and upper value "
+            "of the error band. Pass err_fn=None to use the default one, "
+            "or try: lambda h: (h.mean() + h.std(), h.mean() - h.std()). "
+            f"err_fn returned: {std}")
+
+      if isinstance(std, pd.DataFrame):
+        mean = h.grouped.mean()
+        err_range = (mean - std, mean + std)
+        return representative, err_range
+
+      elif (isinstance(std, tuple) and len(std) == 2 and
+            isinstance(std[0], pd.DataFrame) and
+            isinstance(std[1], pd.DataFrame)):
+        err_range = (std[0], std[1])
+        return representative, err_range  # type: ignore
+
+      raise ValueError("err_fn must return either a tuple of "
+                       "two DataFrames or a single DataFrame, but "
+                       f"got {type(std)}")
+
+    NULL = pd.DataFrame()
+    representative = NULL
+    err = (NULL, NULL)
+    _h_interpolated = None
 
     if 'x' not in kwargs:
       # index (same across runs) being x value, so we can simply average
-      mean, std = _mean_and_err(self._parent)
+      representative, err = _representative_and_err(self._parent)
     else:
       # might have different x values --- we need to interpolate.
       # (i) check if the x-column is consistent?
@@ -363,31 +420,33 @@ class HypothesisPlotter:
             "recommended.", UserWarning)
         n_samples = 10000
       else:
-        mean, std = _mean_and_err(self._parent)
+        representative, err = _representative_and_err(self._parent)
 
     if n_samples is not None:
       # subsample by interpolation, then average.
       _h_interpolated = self._parent.interpolate(
           x_column=kwargs.get('x', None), n_samples=n_samples)
-      mean, std = _mean_and_err(_h_interpolated)
+      representative, err = _representative_and_err(_h_interpolated)
 
       # Now that the index of group-averaged dataframes are the x samples
       # we interpolated on, we can let DataFrame.plot use them as index
       if 'x' in kwargs:
         del kwargs['x']
 
-    if not isinstance(std, pd.DataFrame):
-      raise TypeError(f"err_fn should return a pd.DataFrame, got {type(std)}")
+    if not isinstance(representative, pd.DataFrame):
+      raise TypeError("representative_fn should return a pd.DataFrame, "
+                      f"but got {type(err)}")
 
     # there might be many NaN values if each column is being logged
     # at a different period. We fill in the missing values.
-    mean = mean.interpolate()  # type: ignore
-    std = std.interpolate()  # type: ignore
-    assert mean is not None and std is not None
+    representative = representative.interpolate()
+    assert representative is not None
+    err = (err[0].interpolate(), err[1].interpolate())
+    assert err[0] is not None and err[1] is not None
 
     # determine which columns to draw (i.e. y) before smoothing.
     # should only include numerical values
-    y: Iterable[str] = kwargs.get('y', None) or mean.columns
+    y: Iterable[str] = kwargs.get('y', None) or representative.columns
     if isinstance(y, str):
       y = [y]
     if 'x' in kwargs:
@@ -397,24 +456,25 @@ class HypothesisPlotter:
       # TODO(remove): this is hack to handle homogeneous column names
       # over different hypotheses in a single of experiment, because it
       # will end up adding dummy columns instead of ignoring unknowns.
-      extra_y = set(y) - set(mean.columns)
+      extra_y = set(y) - set(representative.columns)
       for yi in extra_y:
-        mean[yi] = np.nan
+        representative[yi] = np.nan
 
     def _should_include_column(col_name: str) -> bool:
       if not col_name:  # empty name
         return False
 
       # unknown column in the DataFrame
-      assert mean is not None
-      dtypes = mean.dtypes.to_dict()  # type: ignore
+      assert representative is not None
+      dtypes = representative.dtypes.to_dict()  # type: ignore
       if col_name not in dtypes:
         if ignore_unknown:
           return False  # just ignore, no error
         else:
-          raise ValueError(f"Unknown column name '{col_name}'. " +
-                           f"Available columns: {list(mean.columns)}; " +
-                           "Use ignore_unknown=True to ignore unknown columns.")
+          raise ValueError(
+              f"Unknown column name '{col_name}'. " +
+              f"Available columns: {list(representative.columns)}; " +
+              "Use ignore_unknown=True to ignore unknown columns.")
 
       # include only numeric values (integer or float)
       if not (dtypes[col_name].kind in ('i', 'f')):
@@ -424,8 +484,10 @@ class HypothesisPlotter:
     y = [yi for yi in y if _should_include_column(yi)]
 
     if rolling:
-      mean = mean.rolling(rolling, min_periods=1, center=True).mean()
-      std = std.rolling(rolling, min_periods=1, center=True).mean()
+      representative = representative.rolling(
+          rolling, min_periods=1, center=True).mean()
+      err = (err[0].rolling(rolling, min_periods=1, center=True).mean(),
+             err[1].rolling(rolling, min_periods=1, center=True).mean())
 
     # suptitle: defaults to hypothesis name if ax/grid was not given
     if suptitle is None and (ax is None and grid is None):
@@ -433,8 +495,8 @@ class HypothesisPlotter:
 
     return self._do_plot(
         y,
-        mean,  # type: ignore
-        std,  # type: ignore
+        representative,  # type: ignore
+        err,  # type: ignore
         _h_interpolated=_h_interpolated,
         n_samples=n_samples,
         subplots=subplots,
@@ -465,8 +527,8 @@ class HypothesisPlotter:
   def _do_plot(
       self,
       y: List[str],
-      mean: pd.DataFrame,
-      std: pd.DataFrame,
+      representative: pd.DataFrame,  # usually mean
+      err_range: Tuple[pd.DataFrame, pd.DataFrame],  # usually mean ± stderr
       *,
       _h_interpolated: Optional[Hypothesis] = None,  # type: ignore
       n_samples: Optional[int],
@@ -544,7 +606,7 @@ class HypothesisPlotter:
     else:
       kwargs['legend'] = bool(legend)
 
-    axes = mean.plot(*args, subplots=subplots, ax=ax, **kwargs)
+    axes = representative.plot(*args, subplots=subplots, ax=ax, **kwargs)
 
     if err_style not in self.KNOWN_ERR_STYLES:
       raise ValueError(f"Unknown err_style '{err_style}', "
@@ -556,10 +618,10 @@ class HypothesisPlotter:
         ax = cast(Axes, ax)
         mean_line = ax.get_lines()[-1]
         x = kwargs.get('x', None)
-        x_values = mean[x].values if x else mean[yi].index
+        x_values = representative[x].values if x else representative[yi].index
         ax.fill_between(x_values,
-                        (mean - std)[yi].values,
-                        (mean + std)[yi].values,
+                        err_range[0][yi].values,
+                        err_range[1][yi].values,
                         color=mean_line.get_color(),
                         alpha=std_alpha)  # yapf: disable
 
@@ -623,8 +685,8 @@ class HypothesisHvPlotter(HypothesisPlotter):
   def _do_plot(
       self,
       y: List[str],
-      mean: pd.DataFrame,
-      std: pd.DataFrame,
+      representative: pd.DataFrame,
+      err_range: Tuple[pd.DataFrame, pd.DataFrame],  # usually mean ± stderr
       *,
       _h_interpolated: Optional[Hypothesis] = None,
       n_samples: Optional[int],
@@ -642,7 +704,7 @@ class HypothesisHvPlotter(HypothesisPlotter):
       args: List,
       kwargs: Dict,
   ):
-    if not hasattr(mean, 'hvplot'):
+    if not hasattr(representative, 'hvplot'):
       import hvplot.pandas
 
     if subplots:
@@ -650,7 +712,7 @@ class HypothesisHvPlotter(HypothesisPlotter):
 
       # TODO implement various options for hvplot.
       kwargs.update(dict(y=y))
-      p = mean.hvplot(shared_axes=False, subplots=True, **kwargs)
+      p = representative.hvplot(shared_axes=False, subplots=True, **kwargs)
 
       # Display a single legend without duplication
       if legend and isinstance(p.data, dict):
@@ -674,9 +736,9 @@ class HypothesisHvPlotter(HypothesisPlotter):
       raise NotImplementedError
 
     if err_style in ('band', 'fill') and std_alpha:
-      band_lower = mean - std
+      # TODO
+      band_lower, band_upper = err_range
       band_lower['_facet'] = 'lower'
-      band_upper = mean + std
       band_upper['_facet'] = 'upper'
       band = pd.concat([band_lower.add_suffix('.min'),
                         band_upper.add_suffix('.max')], axis=1)  # yapf: disable
