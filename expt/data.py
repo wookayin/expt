@@ -33,7 +33,7 @@ from dataclasses import dataclass  # for python 3.6, backport needed
 from importlib import import_module as _import
 from typing import (TYPE_CHECKING, Any, Callable, Dict, Iterable, Iterator,
                     List, Mapping, MutableMapping, Optional, Sequence, Tuple,
-                    TypeVar, Union, overload)
+                    TypeVar, Union, cast, overload)
 
 import numpy as np
 import pandas as pd
@@ -101,6 +101,15 @@ class Run:
   def to_hypothesis(self) -> 'Hypothesis':
     """Create a new `Hypothesis` consisting of only this run."""
     return Hypothesis.of(self)
+
+  def summary(self, **kwargs) -> pd.DataFrame:
+    """Return a DataFrame that summarizes the current run."""
+    df = self.to_hypothesis().summary(**kwargs)
+    if 'hypothesis' in df:  # e.g., when name=False
+      df['hypothesis'] = df['hypothesis'].apply(lambda h: h[0])
+      df = df.rename(columns={'hypothesis': 'run'})
+      assert 'run' in df.columns, str(df.columns)
+    return df
 
   def plot(self, *args, subplots=True, **kwargs):
     return self.to_hypothesis().plot(*args, subplots=subplots, **kwargs)
@@ -172,23 +181,50 @@ class RunList(Sequence[Run]):
       self,
       include_config: bool = True,
       config_fn: Optional[Callable[[Run], RunConfig]] = None,
+      index_excludelist: Sequence[str] = ('seed', 'random_seed'),
+      as_hypothesis: bool = False,
+      hypothesis_namer: Optional[  # (run_config, runs) -> str
+          Callable[[RunConfig, Sequence[Run]], str]] = None,
+      include_summary: bool = False,
   ) -> pd.DataFrame:
     """Return a DataFrame of runs, with of columns `name` and `run`
     (plus some extra columns as per config_fn).
 
+    The resulting dataframe will have a MultiIndex, consisting of all the
+    column names produced by config_fn() but excluding per `index_excludelist`.
+    The order of index column is the natural, sequential order found
+    from the config dict (whose key is ordered).
+
     Args:
-      include_config: If True (default), the dataframe will include
-        additional series will be added as index or normal columns.
+      include_config: If True (default), the dataframe will have run config
+        as a MultiIndex.
       config_fn: A function that returns the config dict (mapping) for each
         run. This should be a function that takes a Run as the sole argument
         and returns Dict[str, number]. If not given (or None),
-        `run.config` will be used instead.
+        `run.config` will be used instead, if available.
+      config_fn: If given, this should be a function that takes a Run
+        and returns Dict[str, number]. Additional series will be added
+        to the dataframe from the result of this function.
+      index_excludelist: A list of column names to exclude from multi index.
+        Explicitly set as the empty list if you want to include the
+        default excludelist names (seed, random_seed).
+      as_hypothesis: If True, all the runs for each group will be merged
+        as a Hypothesis. Default value is False, where individual runs will
+        appear, one at a row. Only effective when config_fn is given.
+      hypothesis_namer: A function that determines the name of Hypothesis
+        given a group of runs. The function should takes two arguments,
+        (run_config as dict, list of runs). Used when `as_hypothesis` is True.
+        See also: Experiment.from_dataframe()
+      include_summary: If True, include the summary statistics of each run
+        or hypothesis as additional columns in the returning dataframe.
+        See Hypothesis.summary().
     """
     df = pd.DataFrame({
         'name': [r.name for r in self._runs],
         'run': self._runs,
     })
 
+    config_keys = []
     if include_config:
       if config_fn is None:
 
@@ -206,12 +242,68 @@ class RunList(Sequence[Run]):
         for k, v in config.items():
           dtype = np.array(v).dtype
           if k not in df:
-            df[k] = None  # create a new column if not exists
+            # TODO: Consider NaN as a placeholder value rather than empty str.
+            df[k] = ''  # create a new column if not exists
+            if k not in index_excludelist:
+              config_keys.append(k)
           df.loc[i, k] = v
 
-    # Put 'run' in the rightmost column.
+    # Move 'name' and 'run' to the rightmost column.
+    df.insert(len(df.columns) - 1, 'name', df.pop('name'))
     df.insert(len(df.columns) - 1, 'run', df.pop('run'))
-    return df
+
+    # Automatically set multi-index.
+    if config_keys:
+      df = df.set_index(config_keys, inplace=False)  # type: ignore
+      df = df.sort_index(inplace=False)  # type: ignore
+      assert df is not None
+
+      # pandas groupby(dropna=...) has a bug that rows with any nan value
+      # in the multi-index will be incorrectly dropped (see pandas#36060)
+      # As a workaround, we fill the nan in the index with an empty string.
+      df.index = pd.MultiIndex.from_frame(df.index.to_frame().fillna(""))
+
+    # Aggregate runs into hypothesis if needed.
+    if as_hypothesis:
+
+      if not config_keys:
+        raise ValueError("No config were detected. "
+                         "Use config_fn or make sure Runs have config set.")
+
+      if hypothesis_namer is None:
+        # yapf: disable
+        def _hypothesis_namer(config: Mapping[str, Any],
+                              runs: Sequence[Run]) -> str:
+          return "; ".join([f"{k}={v}" for (k, v) in config.items()])
+        hypothesis_namer = _hypothesis_namer
+        # yapf: enable
+
+      def _group_to_hypothesis(g: pd.DataFrame) -> Hypothesis:
+        # All runs in the group share the same keys and values.
+        # Note that config lies in the (multi)index.
+        group_config: Dict[str, Any] = dict(zip(g.index.names, g.index[0]))
+        h_name = hypothesis_namer(group_config, g.run.values)
+        return Hypothesis(h_name, g['run'].values)
+
+      # yapf: disable
+      df = (df
+            .groupby(config_keys, dropna=False)  # dropna bug (pandas#36060)
+            .apply(_group_to_hypothesis)
+            .to_frame(name="hypothesis"))
+      # yapf: enable
+
+    else:
+      if hypothesis_namer is not None:
+        raise ValueError("When hypothesis_namer is set, "
+                         "as_hypothesis must be True")
+
+    if include_summary:
+      series = df['run'] if 'run' in df else df['hypothesis']
+      assert series is not None
+      # TODO check name?
+      df = series.apply(lambda h: h.summary(name=False).iloc[0])
+
+    return df  # type: ignore
 
   def filter(self, fn: Union[Callable[[Run], bool], str,
                              re.Pattern]) -> 'RunList':
@@ -364,9 +456,9 @@ class Hypothesis(Iterable[Run]):
     after aggregating all runs (e.g., mean)."""
     return self.mean().describe()
 
-  def summary(self) -> pd.DataFrame:
+  def summary(self, **kwargs) -> pd.DataFrame:
     """Return a DataFrame that summarizes the current hypothesis."""
-    return Experiment(self.name, [self]).summary()
+    return Experiment(self.name, [self]).summary(**kwargs)
 
   if TYPE_CHECKING:  # Provide type hint and documentation for static checker.
     import expt.plot
@@ -421,7 +513,10 @@ class Hypothesis(Iterable[Run]):
     g = self.grouped
     return g.max(*args, **kwargs)  # type: ignore
 
-  def interpolate(self, x_column: Optional[str] = None, *, n_samples: int):
+  def interpolate(self,
+                  x_column: Optional[str] = None,
+                  *,
+                  n_samples: int) -> 'Hypothesis':
     """Interpolate by uniform subsampling, and return a processed hypothesis.
 
     This is useful when the hypothesis' individual runs may have heterogeneous
@@ -534,14 +629,16 @@ class Experiment(Iterable[Hypothesis]):
   def from_dataframe(
       cls,
       df: pd.DataFrame,
-      by: Optional[Union[str, List[str]]] = None,
+      by: Optional[Union[str, Sequence[str]]] = None,
       *,
       run_column: str = 'run',
-      hypothesis_namer: Callable[..., str] = str,
+      hypothesis_namer: Optional[  # (run_config, runs) -> str
+          Callable[[RunConfig, Sequence[Run]], str]] = None,
       name: Optional[str] = None,
   ) -> 'Experiment':
-    """Constructs a new Experiment object from a DataFrame instance
-    structured as per the convention.
+    """Constructs a new Experiment object from a DataFrame instance,
+    that is structured as per the convention. The DataFrame objects are
+    usually constructed from `RunList.to_dataframe()`.
 
     Args:
       by (str, List[str]): The column name to group by. If None (default),
@@ -550,24 +647,50 @@ class Experiment(Iterable[Hypothesis]):
       run_column (str): The column name that contains `Run` objects.
         See also `RunList.to_dataframe()`.
       hypothesis_namer: This is a mapping that transforms the group key
-        (a str or tuple) that pandas groupby produces into hypothesis name.
-        This function should take one positional argument for the group key.
+        (a dict) into hypothesis name. The function should take two arguments,
+        (group_key as dict, list of runs).
       name: The name for the produced `Experiment`.
     """
     if by is None:
       # Automatically determine the column from df.
       by_columns = list(sorted(set(df.columns).difference([run_column])))
-      if len(by_columns) != 1:
+      if 'hypothesis' in by_columns:
+        # TODO test this behavior
+        by = 'hypothesis'
+      elif len(by_columns) == 1:
+        by = next(iter(by_columns))
+      else:
         raise ValueError("Cannot automatically determine the column to "
                          "group by. Candidates: {}".format(by_columns))
-      by = next(iter(by_columns))
 
     ex = Experiment(name=name)
-    for hypothesis_key, runs_df in df.groupby(by):
-      hypothesis_name = hypothesis_namer(hypothesis_key)
-      runs = RunList(runs_df[run_column])
-      h = runs.to_hypothesis(name=hypothesis_name)
-      ex.add_hypothesis(h)
+
+    # Special case: already grouped (see RunList:to_dataframe(as_hypothesis=True))
+    # TODO: This groupby feature needs to be incorporated by to_dataframe().
+    if by == 'hypothesis':
+      hypotheses = list(df['hypothesis'])
+      if not hypotheses:
+        raise ValueError("The dataframe contains no Hypotheses, seems empty.")
+      if not isinstance(hypotheses[0], Hypothesis):
+        raise ValueError("The column 'hypothesis' does not contain "
+                         "a Hypothesis object.")
+      for h in hypotheses:
+        # TODO test this behavior on h_namer
+        ex.add_hypothesis(h)
+
+    else:
+      if hypothesis_namer is None:
+        hypothesis_namer = lambda keys, _: str(keys)
+
+      # A column made of Runs...
+      for hypothesis_key, runs_df in df.groupby(by):
+        if isinstance(hypothesis_key, tuple):
+          hypothesis_key = dict(zip(cast(List[str], by), hypothesis_key))
+        runs = RunList(runs_df[run_column])
+        hypothesis_name = hypothesis_namer(hypothesis_key, runs)
+        h = runs.to_hypothesis(name=hypothesis_name)
+        ex.add_hypothesis(h)
+
     return ex
 
   def add_runs(
@@ -768,7 +891,7 @@ class Experiment(Iterable[Hypothesis]):
     return (lambda series: series.rolling(max(1, int(len(series) * portion))
                                           ).mean().iloc[-1])  # yapf: disable
 
-  def summary(self, columns=None, aggregate=None) -> pd.DataFrame:
+  def summary(self, *, name=True, columns=None, aggregate=None) -> pd.DataFrame:
     """Return a DataFrame that summarizes the current experiments,
     whose rows are all hypothesis.
 
@@ -789,7 +912,10 @@ class Experiment(Iterable[Hypothesis]):
     columns = columns or (['index'] + list(self.columns))
     aggregate = aggregate or self.AGGREGATE_MEAN_LAST(0.1)
 
-    df = pd.DataFrame({'hypothesis': [h.name for h in self.hypotheses]})
+    if name:
+      df = pd.DataFrame({'name': [h.name for h in self.hypotheses]})
+    else:
+      df = pd.DataFrame({'hypothesis': self.hypotheses})
     hypo_means = [
         (h.mean() if not all(len(df) == 0
                              for df in h._dataframes) else pd.DataFrame())
@@ -820,7 +946,10 @@ class Experiment(Iterable[Hypothesis]):
       df[column] = [aggregate_h(df_series(hm)) for hm in hypo_means]
     return df
 
-  def interpolate(self, x_column: Optional[str] = None, *, n_samples: int):
+  def interpolate(self,
+                  x_column: Optional[str] = None,
+                  *,
+                  n_samples: int) -> 'Experiment':
     """Apply interpolation to each of the hypothesis, and return a copy
     of new Experiment (and its children Hypothesis/Run) object.
 

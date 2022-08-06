@@ -56,6 +56,16 @@ class TestRun(_TestBase):
     r = Run("/tmp/some-run-with-config", df=df, config=config)
     assert r.config == config
 
+  def test_run_summary(self):
+    r = Run("foo", pd.DataFrame({"y": np.arange(100)}))
+    df = r.summary()
+
+    print(df)
+    assert len(df) == 1
+    assert df['name'][0] == 'foo'
+
+    # name=False: 'run'
+
 
 class TestRunList(_TestBase):
 
@@ -167,13 +177,12 @@ class TestRunList(_TestBase):
     assert list(df['env_id'].unique()) == ["halfcheetah", "hopper", "humanoid"]  # yapf: disable
     assert list(df['seed'].unique()) == ['0', '1']
 
-  def test_to_dataframe(self, runs_gridsearch: RunList):
+  def test_to_dataframe_multiindex(self, runs_gridsearch: RunList):
     runs = runs_gridsearch
-    runs[0].config = {'algorithm': 'ppo', 'some_key': 'some_value'}
 
-    # with run.config (default)
+    # when there is no config.
     df = runs.to_dataframe()
-    assert list(df.columns) == ['name', 'algorithm', 'some_key', 'run']
+    assert list(df.columns) == ['name', 'run']
 
     # with custom config_fn
     def _config_fn(run: Run):
@@ -181,13 +190,23 @@ class TestRunList(_TestBase):
       return dict(algorithm=algorithm, env=env, seed=seed)
 
     df = runs.to_dataframe(config_fn=_config_fn)
-
-    # validate df
     print(df)
-    assert list(df.columns) == ['name', 'algorithm', 'env', 'seed', 'run']
+    assert df.index.names == ['algorithm', 'env']
+    assert list(df.columns) == ['seed', 'name', 'run']  # in order!
+    assert isinstance(df.run[0], Run)
 
-    np.testing.assert_array_equal(df['name'], [r.name for r in runs])
-    np.testing.assert_array_equal(df['run'], list(runs))  # type: ignore
+    # additional option: as_hypothesis
+    df = runs.to_dataframe(config_fn=_config_fn, as_hypothesis=True)
+    print(df)
+    assert list(df.columns) == ['hypothesis']  # no 'name'
+    assert df.hypothesis[0].name == 'algorithm=ppo; env=halfcheetah'
+    assert isinstance(df.hypothesis[0], Hypothesis)
+
+    # additional option: include_summary
+    df = runs.to_dataframe(
+        config_fn=_config_fn, as_hypothesis=True, include_summary=True)
+    assert list(df.columns) == ['hypothesis', 'index', 'reward']
+    assert df.reward[0] == df.hypothesis[0].summary()['reward'][0]
 
 
 class TestHypothesis(_TestBase):
@@ -247,13 +266,27 @@ class TestHypothesis(_TestBase):
     # test gropued, columns, mean, std, min, max, etc.
     pass
 
+  def test_summary(self):
+    r0 = Run("r0", pd.DataFrame({"x": np.arange(100), "y": np.arange(100)}))
+    r1 = Run("r1", pd.DataFrame({"x": np.zeros(100), "y": np.arange(100)}))
+    h = Hypothesis.of(name="hello", runs=[r0, r1])
+    df = h.summary()
+
+    print(df)
+    assert len(df) == 1
+    assert df['name'][0] == 'hello'
+
+    # The default behavior is average of last 10% rows.
+    assert df['x'][0] == np.mean(range(90, 100)) / 2.0
+    assert df['y'][0] == np.mean(range(90, 100))
+    assert df['index'][0] == 99  # max(index)
+
   def test_interpolate(self):
     """Tests interpolate and subsampling when runs have different support."""
     h: Hypothesis = self._fixture()
 
     # (1) Test a normal case.
     h_interpolated = h.interpolate("x", n_samples=91)
-
     assert h_interpolated.name == h.name
 
     dfs_interp = h_interpolated._dataframes
@@ -340,10 +373,13 @@ class TestExperiment(_TestBase):
     ex = V(Experiment.from_dataframe(df, by=["algo", "env_id"], name="A"))
     assert len(ex.hypotheses) == 6
     assert isinstance(ex.hypotheses[0].name, str)
-    assert ex.hypotheses[0].name == repr(('ppo', 'halfcheetah'))
+    assert ex.hypotheses[0].name == repr({
+        'algo': 'ppo',
+        'env_id': 'halfcheetah'
+    })
 
     # Group by ['env_id', 'algo'] and use a custom namer
-    namer = lambda t: f"{t[0]}-{t[1]}"
+    namer = lambda t, _: f"{t['env_id']}-{t['algo']}"
     ex = V(Experiment.from_dataframe(
             df, by=["env_id", "algo"], hypothesis_namer=namer, name="B"))  # yapf: disable
     assert ex.hypotheses[0].name == 'halfcheetah-ppo'
