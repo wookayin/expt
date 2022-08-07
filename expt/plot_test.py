@@ -423,7 +423,7 @@ class TestExperimentPlot:
     assert g.figure.legends
 
     # Automatic placement: with two labels, placed on the first axis
-    g = ex.plot(legend=ex.plot.LegendPreset.AUTO)
+    g = ex.plot(legend=expt.plot.LegendPreset.AUTO)
     assert g.figure.legends == []
     assert g.axes_active[0].get_legend()
 

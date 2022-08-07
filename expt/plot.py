@@ -812,10 +812,44 @@ class LegendSpec(dict):
   with_ = __call__
 
 
+class LegendPreset:
+  """Some commonly-used configurations for placing legend.
+
+  See the documentation of matplotlib.legend().
+  """
+  FIRST_AXIS = LegendSpec(ax=0)
+  RIGHT = LegendSpec(loc='upper left', bbox_to_anchor=(1.03, 0.95), ncol=1)
+  BOTTOM = LegendSpec(loc='upper center', bbox_to_anchor=(0.5, 0.0), ncol=4)
+  BOTTOM_1COL = BOTTOM(ncol=1)
+  TOP = LegendSpec(loc='lower center', bbox_to_anchor=(0.5, 0.95), ncol=4)
+
+  @classmethod
+  def AUTO(cls, labels: List[str]):
+    """Default, automatic behavior of placing the legend.
+
+    Put a legend on the right side of the figure (outside the grid),
+    or on the first axes if #hypothesis is small enough (<=5).
+    """
+    # only one: put in the upper center like a title.
+    if len(labels) == 1:
+      return cls.TOP
+
+    # It can be lengthy; Use side layout on the right.
+    if len(labels) > 5 or any(len(label) > 20 for label in labels):
+      return cls.RIGHT
+
+    # compact enough; show in the first axes.
+    return cls.FIRST_AXIS
+
+  def __new__(cls):
+    raise TypeError("This class cannot be instantiated.")
+
+
 class ExperimentPlotter:
 
   def __init__(self, experiment: Experiment):
     self._parent = experiment
+    self.LegendPreset = LegendPreset
 
   def __repr__(self):
     return "<ExperimentPlotter<{}>".format(self._parent)
@@ -827,37 +861,6 @@ class ExperimentPlotter:
   @property
   def _columns(self) -> Iterable[str]:
     return self._parent.columns
-
-  class LegendPreset:
-    """Some commonly-used configurations for placing legend.
-
-    See the documentation of matplotlib.legend().
-    """
-    FIRST_AXIS = LegendSpec(ax=0)
-    RIGHT = LegendSpec(loc='upper left', bbox_to_anchor=(1.03, 0.95), ncol=1)
-    BOTTOM = LegendSpec(loc='upper center', bbox_to_anchor=(0.5, 0.0), ncol=4)
-    TOP = LegendSpec(loc='lower center', bbox_to_anchor=(0.5, 0.95), ncol=4)
-
-    @classmethod
-    def AUTO(cls, labels: List[str]):
-      """Default, automatic behavior of placing the legend.
-
-      Put a legend on the right side of the figure (outside the grid),
-      or on the first axes if #hypothesis is small enough (<=5).
-      """
-      # only one: put in the upper center like a title.
-      if len(labels) == 1:
-        return cls.TOP
-
-      # It can be lengthy; Use side layout on the right.
-      if len(labels) > 5 or any(len(label) > 20 for label in labels):
-        return cls.RIGHT
-
-      # compact enough; show in the first axes.
-      return cls.FIRST_AXIS
-
-    def __new__(cls):
-      raise TypeError("This class cannot be instantiated.")
 
   def __call__(
       self,
