@@ -208,6 +208,12 @@ class TestRunList(_TestBase):
     assert list(df.columns) == ['hypothesis', 'index', 'reward']
     assert df.reward[0] == df.hypothesis[0].summary()['reward'][0]
 
+    # Tests index_keys and index_excludelist
+    df = runs.to_dataframe(config_fn=_config_fn, index_keys=['algorithm'])
+    assert df.index.names == ['algorithm']
+    df = runs.to_dataframe(config_fn=_config_fn, index_excludelist=['env'])
+    assert df.index.names == ['algorithm', 'seed']
+
 
 class TestHypothesis(_TestBase):
 

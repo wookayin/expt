@@ -24,6 +24,7 @@ of hypotheses or algorithms applied over different environments or dataset).
 """
 
 import collections
+import difflib
 import fnmatch
 import itertools
 import os.path
@@ -181,6 +182,7 @@ class RunList(Sequence[Run]):
       self,
       include_config: bool = True,
       config_fn: Optional[Callable[[Run], RunConfig]] = None,
+      index_keys: Optional[Sequence[str]] = None,
       index_excludelist: Sequence[str] = ('seed', 'random_seed'),
       as_hypothesis: bool = False,
       hypothesis_namer: Optional[  # (run_config, runs) -> str
@@ -205,6 +207,8 @@ class RunList(Sequence[Run]):
       config_fn: If given, this should be a function that takes a Run
         and returns Dict[str, number]. Additional series will be added
         to the dataframe from the result of this function.
+      index_keys: A list of column names to include in the multi index.
+        If omitted, all the keys from run.config will be used (see config_fn).
       index_excludelist: A list of column names to exclude from multi index.
         Explicitly set as the empty list if you want to include the
         default excludelist names (seed, random_seed).
@@ -239,14 +243,26 @@ class RunList(Sequence[Run]):
         config: Mapping[str, Any] = config_fn(run)
         if not isinstance(config, Mapping):
           raise ValueError("config_fn should return a dict-like object.")
-        for k, v in config.items():
+
+        r_keys = index_keys if index_keys is not None else config.keys()
+        for k in r_keys:
+          if k not in config:
+            raise ValueError(
+                f"'{k}' not found in the config of {run}. Close matches: " +
+                str(difflib.get_close_matches(k, config.keys())))
+          v = config[k]
           dtype = np.array(v).dtype
           if k not in df:
             # TODO: Consider NaN as a placeholder value rather than empty str.
             df[k] = ''  # create a new column if not exists
             if k not in index_excludelist:
               config_keys.append(k)
-          df.loc[i, k] = v
+
+          try:
+            df.loc[i, k] = v
+          except ValueError as e:
+            raise ValueError(f"Failed to assign index for '{k}' "
+                             f"with type {type(v)}") from e
 
     # Move 'name' and 'run' to the rightmost column.
     df.insert(len(df.columns) - 1, 'name', df.pop('name'))
