@@ -178,12 +178,14 @@ class RunList(Sequence[Run]):
     """Create a new copy of list containing all the runs."""
     return list(self._runs)
 
+  INDEX_EXCLUDE_DEFAULT = ('seed', 'random_seed', 'log_dir', 'train_dir')
+
   def to_dataframe(
       self,
       include_config: bool = True,
       config_fn: Optional[Callable[[Run], RunConfig]] = None,
       index_keys: Optional[Sequence[str]] = None,
-      index_excludelist: Sequence[str] = ('seed', 'random_seed'),
+      index_excludelist: Sequence[str] = INDEX_EXCLUDE_DEFAULT,
       as_hypothesis: bool = False,
       hypothesis_namer: Optional[  # (run_config, runs) -> str
           Callable[[RunConfig, Sequence[Run]], str]] = None,
@@ -208,7 +210,10 @@ class RunList(Sequence[Run]):
         and returns Dict[str, number]. Additional series will be added
         to the dataframe from the result of this function.
       index_keys: A list of column names to include in the multi index.
-        If omitted, all the keys from run.config will be used (see config_fn).
+        If omitted (using the default setting), all the keys from run.config
+        that have at least two different unique values will be used
+        (see config_fn). If there is only one run, all the columns will be
+        used as the default index_keys.
       index_excludelist: A list of column names to exclude from multi index.
         Explicitly set as the empty list if you want to include the
         default excludelist names (seed, random_seed).
@@ -239,12 +244,15 @@ class RunList(Sequence[Run]):
 
         config_fn = _default_config_fn
 
+      if index_keys is None:  # using default index
+        index_keys = varied_config_keys(self._runs, config_fn=config_fn)
+
       for i, run in enumerate(self._runs):
         config: Mapping[str, Any] = config_fn(run)
         if not isinstance(config, Mapping):
           raise ValueError("config_fn should return a dict-like object.")
 
-        r_keys = index_keys if index_keys is not None else config.keys()
+        r_keys = index_keys
         for k in r_keys:
           if k not in config:
             raise ValueError(
@@ -404,6 +412,22 @@ class RunList(Sequence[Run]):
     df = df['name'].str.extract(pat, flags=flags)
     df['run'] = list(self._runs)
     return df
+
+
+def varied_config_keys(
+    runs: Sequence[Run],
+    config_fn: Callable[[Run], RunConfig],
+) -> Sequence[str]:
+  """Get a list of config keys (or indices in to_dataframe) that have more than
+  two different unique values."""
+
+  key_values = collections.defaultdict(set)
+  for r in runs:
+    for k, v in config_fn(r).items():
+      key_values[k].add(v)
+
+  keys = tuple(k for (k, values) in key_values.items() if len(values) > 1)
+  return keys
 
 
 @dataclass

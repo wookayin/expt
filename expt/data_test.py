@@ -187,11 +187,11 @@ class TestRunList(_TestBase):
     # with custom config_fn
     def _config_fn(run: Run):
       algorithm, env, seed = run.name.split('-')
-      return dict(algorithm=algorithm, env=env, seed=seed)
+      return dict(algorithm=algorithm, env=env, seed=seed, common="common")
 
     df = runs.to_dataframe(config_fn=_config_fn)
     print(df)
-    assert df.index.names == ['algorithm', 'env']
+    assert df.index.names == ['algorithm', 'env']  # should exclude 'common'
     assert list(df.columns) == ['seed', 'name', 'run']  # in order!
     assert isinstance(df.run[0], Run)
 
@@ -209,8 +209,9 @@ class TestRunList(_TestBase):
     assert df.reward[0] == df.hypothesis[0].summary()['reward'][0]
 
     # Tests index_keys and index_excludelist
-    df = runs.to_dataframe(config_fn=_config_fn, index_keys=['algorithm'])
-    assert df.index.names == ['algorithm']
+    df = runs.to_dataframe(config_fn=_config_fn, \
+                           index_keys=['algorithm', 'common'])
+    assert df.index.names == ['algorithm', 'common']
     df = runs.to_dataframe(config_fn=_config_fn, index_excludelist=['env'])
     assert df.index.names == ['algorithm', 'seed']
 
