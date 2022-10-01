@@ -419,7 +419,8 @@ def varied_config_keys(
     config_fn: Callable[[Run], RunConfig],
 ) -> Sequence[str]:
   """Get a list of config keys (or indices in to_dataframe) that have more than
-  two different unique values."""
+  two different unique values. If all the configs are identical, the list
+  will contain all the unique config keys existing in any of the runs."""
 
   key_values = collections.defaultdict(set)
   for r in runs:
@@ -427,6 +428,9 @@ def varied_config_keys(
       key_values[k].add(v)
 
   keys = tuple(k for (k, values) in key_values.items() if len(values) > 1)
+  if not keys:
+    # All the runs have identical config, so use all of them
+    return tuple(key_values.keys())
   return keys
 
 

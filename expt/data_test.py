@@ -215,6 +215,17 @@ class TestRunList(_TestBase):
     df = runs.to_dataframe(config_fn=_config_fn, index_excludelist=['env'])
     assert df.index.names == ['algorithm', 'seed']
 
+  def test_to_dataframe_singlerun(self, runs_gridsearch: RunList):
+    run = runs_gridsearch[0]
+    run.config = {
+        'foo': 1,
+        'bar': 2,
+    }
+
+    runs = RunList([run])
+    df = runs.to_dataframe()
+    assert df.index.names == ['foo', 'bar']
+
 
 class TestHypothesis(_TestBase):
 
