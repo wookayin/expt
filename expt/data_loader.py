@@ -251,15 +251,17 @@ class TensorboardLogReader(LogReader):
         context.rows_read.update({event_file: rows_read})
         context.last_read_rows += rows_read
 
-      for step, tag_name, value in \
+      for global_step, tag_name, value in \
           self._iter_scalar_summary_from(
               event_file, skip=context.rows_read[event_file],
               rows_callback=_callback,
           ):  # noqa: E125
-        chunk[tag_name][step] = value
+        # Make sure global_step is always stored as integer.
+        global_step = int(global_step)
+        chunk[tag_name][global_step] = value
 
     df_chunk = pd.DataFrame(chunk)
-    df_chunk['global_step'] = df_chunk.index
+    df_chunk['global_step'] = df_chunk.index.astype(int)
 
     # Merge the previous dataframe and the new one that was read.
     # The current chunk will overwrite any existing previous row.
