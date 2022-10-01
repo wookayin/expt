@@ -119,6 +119,12 @@ class Run:
     return self.to_hypothesis().hvplot(*args, subplots=subplots, **kwargs)
 
 
+def _default_config_fn(run: Run) -> RunConfig:
+  if run.config is not None:
+    return run.config
+  return {}
+
+
 class RunList(Sequence[Run]):
   """A (immutable) list of Run objects, but with some useful utility
   methods such as filtering, searching, and handy format conversion."""
@@ -236,12 +242,6 @@ class RunList(Sequence[Run]):
     config_keys = []
     if include_config:
       if config_fn is None:
-
-        def _default_config_fn(run: Run) -> RunConfig:
-          if run.config is not None:
-            return run.config
-          return {}
-
         config_fn = _default_config_fn
 
       if index_keys is None:  # using default index
@@ -416,7 +416,7 @@ class RunList(Sequence[Run]):
 
 def varied_config_keys(
     runs: Sequence[Run],
-    config_fn: Callable[[Run], RunConfig],
+    config_fn: Callable[[Run], RunConfig] = _default_config_fn,
 ) -> Sequence[str]:
   """Get a list of config keys (or indices in to_dataframe) that have more than
   two different unique values. If all the configs are identical, the list
