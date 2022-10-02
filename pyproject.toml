@@ -1,0 +1,9 @@
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (runnable with --run-slow)",
+    "serial",
+]
+filterwarnings = [
+    "ignore:Call to deprecated create function .*Descriptor:DeprecationWarning",
+    "ignore:.*is deprecated and will be removed in Pillow 10:DeprecationWarning",
+]

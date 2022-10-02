@@ -2,21 +2,26 @@
 Path (local- and remote-) related utilities.
 """
 
+import ast
 import io
+import os
 import os.path
 import shlex
 import subprocess
 import sys
+import typing
 from distutils.spawn import find_executable
 from glob import glob as local_glob
 from pathlib import Path
-from typing import List
+from typing import List, Sequence, Union
 
 # Options for gsutil. By default, gsutil is disabled as tf.io.gfile is
 # **much** faster than gsutil commands (for globbing and listing).
-USE_GSUTIL = False
+USE_GSUTIL = bool(ast.literal_eval(os.environ.get('USE_GSUTIL', 'True')))
 IS_GSUTIL_AVAILABLE = find_executable("gsutil")
 GSUTIL_NO_MATCHES = 'One or more URLs matched no objects'
+
+PathType = Union[str, os.PathLike]
 
 
 def _import_gfile():
@@ -32,11 +37,13 @@ def _import_gfile():
                      "(Cannot import tensorflow.io.gfile)")
 
 
-def _to_path_string(path) -> str:
+def _to_path_string(path: PathType) -> str:
   if isinstance(path, Path):
     return str(path)
-  else:
+  elif isinstance(path, str):
     return path
+  else:
+    raise TypeError(str(type(path)))
 
 
 class GsCommandException(RuntimeError):
@@ -82,7 +89,7 @@ def use_gsutil(value: bool):
     USE_GSUTIL = False
 
 
-def glob(pattern):
+def glob(pattern: PathType) -> Sequence[str]:
   """A glob function, returning a list of paths matching a pathname pattern.
 
   It supports local file path (i.e., glob.glob) and Google Cloud Storage
@@ -122,7 +129,7 @@ def glob(pattern):
     return local_glob(pattern)
 
 
-def exists(path) -> bool:
+def exists(path: PathType) -> bool:
   """Similar to os.path.exists(path), but supports both local path and
   remote path (Google Cloud Storage, gs://...) via gfile.exists(...).
   """
@@ -142,7 +149,7 @@ def exists(path) -> bool:
     return os.path.exists(path)
 
 
-def isdir(path):
+def isdir(path: PathType):
   """Similar to os.path.isdir(path), but supports both local path and
   remote path (Google Cloud Storage, gs://...) via gfile.isdir(...).
   """
@@ -157,7 +164,8 @@ def isdir(path):
     return os.path.isdir(path)
 
 
-def open(path, *, mode='r'):
+# pylint: disable-next=redefined-builtin
+def open(path: PathType, *, mode='r'):
   """Similar to built-in open(...), but supports Google Cloud Storage
   (i.e., gs://...) path via gfile.GFile(...) as well as local path.
   """
