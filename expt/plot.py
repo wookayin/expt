@@ -287,7 +287,7 @@ class HypothesisPlotter:
                grid: Optional[GridPlot] = None,
                ax: Optional[Union[Axes, np.ndarray]] = None,
                tight_layout: bool = True,
-               **kwargs) -> 'holoviews.core.layout.NdLayout':  # type: ignore
+               **kwargs) -> GridPlot:
     '''Hypothesis.plot based on matplotlib.
 
     This can work in two different modes:
@@ -519,8 +519,8 @@ class HypothesisPlotter:
       raise TypeError("`ax` must be a single Axes or a ndarray of Axes, "
                       "but given {}".format(ax))
     if isinstance(ax, Axes):
-      ax = np.asarray([ax], dtype=object)
-    if len(ax) != len(y):
+      ax = np.asarray([[ax]], dtype=object)
+    if len(ax.ravel()) != len(y):
       raise ValueError("The length of `ax` and `y` must be equal: "
                        "ax = {}, y = {}".format(len(ax), len(y)))
 
