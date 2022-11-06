@@ -4,7 +4,8 @@ import os
 import re
 import sys
 
-from setuptools import Command, setup
+from setuptools import Command
+from setuptools import setup
 
 __PATH__ = os.path.abspath(os.path.dirname(__file__))
 

@@ -1,17 +1,18 @@
 import functools
 import os
+from pathlib import Path
 import shutil
 import sys
 import tempfile
 import urllib.request
-import warnings
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from expt import data, data_loader, util
+from expt import data
+from expt import data_loader
+from expt import util
 
 __PATH__ = os.path.abspath(os.path.dirname(__file__))
 FIXTURE_PATH = os.path.join(__PATH__, '../fixtures')

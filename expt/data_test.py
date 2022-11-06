@@ -8,7 +8,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from expt.data import Experiment, Hypothesis, Run, RunList
+from expt.data import Experiment
+from expt.data import Hypothesis
+from expt.data import Run
+from expt.data import RunList
 
 try:
   from rich.console import Console

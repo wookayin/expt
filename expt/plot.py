@@ -2,19 +2,20 @@
 
 import difflib
 import itertools
+from typing import (Any, Callable, cast, Dict, Iterable, List, Optional,
+                    overload, Sequence, Tuple, Union)
 import warnings
-from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
-                    Tuple, TypeVar, Union, cast, overload)
 
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 import matplotlib.ticker
 import numpy as np
 import pandas as pd
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from pandas.core.groupby.generic import DataFrameGroupBy
 
-from . import util
-from .data import Experiment, Hypothesis, Run
+from expt import util
+from expt.data import Experiment
+from expt.data import Hypothesis
 
 # yapf: disable
 warnings.filterwarnings("ignore", category=UserWarning,

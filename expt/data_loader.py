@@ -3,25 +3,24 @@
 import abc
 import asyncio
 import atexit
+from collections import Counter
+from collections import defaultdict
 import dataclasses
-import functools
 import itertools
 import multiprocessing.pool
 import os
-import sys
-import threading
-import warnings
-from collections import Counter, defaultdict, namedtuple
 from pathlib import Path
-from typing import (Any, Callable, Dict, Iterator, List, Mapping, Optional,
-                    Tuple, TypeVar, Union)
+import sys
+from typing import Callable, Iterator, Optional, Tuple, TypeVar, Union
 
 import multiprocess.pool
 import numpy as np
 import pandas as pd
 
-from expt import path_util, util
-from expt.data import Experiment, Hypothesis, Run, RunList
+from expt import path_util
+from expt import util
+from expt.data import Run
+from expt.data import RunList
 
 try:
   from tqdm.auto import tqdm

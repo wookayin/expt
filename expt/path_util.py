@@ -1,18 +1,15 @@
-"""\
-Path (local- and remote-) related utilities.
-"""
+"""Path (local- and remote-) related utilities."""
 
 import ast
+from distutils.spawn import find_executable
+from glob import glob as local_glob
 import io
 import os
 import os.path
+from pathlib import Path
 import shlex
 import subprocess
 import sys
-import typing
-from distutils.spawn import find_executable
-from glob import glob as local_glob
-from pathlib import Path
 from typing import List, Sequence, Union
 
 # Options for gsutil. By default, gsutil is disabled as tf.io.gfile is

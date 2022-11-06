@@ -1,3 +1,9 @@
+[tool.isort]
+# https://pycqa.github.io/isort/docs/configuration/options.html
+profile = "google"
+known_third_party = []
+extra_standard_library = ['typing_extensions']
+
 [tool.pytest.ini_options]
 markers = [
     "slow: marks tests as slow (runnable with --run-slow)",

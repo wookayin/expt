@@ -5,7 +5,7 @@ import collections
 import concurrent.futures
 import contextlib
 import functools
-from typing import Callable, List, Optional
+from typing import Callable, List
 
 from typeguard import typechecked
 

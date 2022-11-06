@@ -24,17 +24,17 @@ of hypotheses or algorithms applied over different environments or dataset).
 """
 
 import collections
+from dataclasses import dataclass  # for python 3.6, backport needed
 import difflib
 import fnmatch
+from importlib import import_module as _import
 import itertools
 import os.path
 import re
 import types
-from dataclasses import dataclass  # for python 3.6, backport needed
-from importlib import import_module as _import
-from typing import (TYPE_CHECKING, Any, Callable, Dict, Iterable, Iterator,
-                    List, Mapping, MutableMapping, Optional, Sequence, Tuple,
-                    TypeVar, Union, cast, overload)
+from typing import (Any, Callable, cast, Dict, Iterable, Iterator, List,
+                    Mapping, MutableMapping, Optional, overload, Sequence,
+                    Tuple, TYPE_CHECKING, TypeVar, Union)
 
 import numpy as np
 import pandas as pd

@@ -1,7 +1,7 @@
 """Tests for expt.plot"""
 import contextlib
 import sys
-from typing import List, Tuple, cast
+from typing import cast, List, Tuple
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -10,9 +10,10 @@ import pandas as pd
 import pytest
 
 import expt.colors
-import expt.data
+from expt.data import Experiment
+from expt.data import Hypothesis
+from expt.data import Run
 import expt.plot
-from expt.data import Experiment, Hypothesis, Run, RunList
 
 try:
   from rich.console import Console
