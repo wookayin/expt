@@ -14,6 +14,7 @@ jobs:
           - "3.8"
           - "3.9"
           - "3.10"
+          - "3.11"
 
     steps:
       - name: Checkout expt
@@ -39,6 +40,5 @@ jobs:
       - name: Run tests
         run: |
           pytest --color=yes -vv -s
-
 
 # Ref: https://github.com/actions/setup-python
