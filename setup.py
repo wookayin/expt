@@ -92,7 +92,7 @@ tests_requires = [
     'pytest>=5.0',  # Python 3.5+
     'pytest-cov',
     'pytest-asyncio',
-    'tensorflow',
+    'tensorboard>=2.3',
 ]
 
 setup(

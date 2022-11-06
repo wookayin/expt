@@ -3,6 +3,7 @@
 import abc
 import asyncio
 import atexit
+import collections
 from collections import Counter
 from collections import defaultdict
 import dataclasses
@@ -11,7 +12,8 @@ import multiprocessing.pool
 import os
 from pathlib import Path
 import sys
-from typing import Callable, Iterator, Optional, Tuple, TypeVar, Union
+from typing import (Any, Callable, Generator, Iterator, NamedTuple, Optional,
+                    Tuple, TYPE_CHECKING, TypeVar, Union)
 
 import multiprocess.pool
 import numpy as np
@@ -169,9 +171,9 @@ class TensorboardLogReader(LogReader):
     if not self._event_files:  # no event file detected
       raise FileNotFoundError(f"No event file detected in {self.log_dir}")
 
-    # Initialize tensorflow earlier otherwise the forked processes will
-    # need to do it again.
-    import tensorflow as tf  # type: ignore
+    # Try importing tensorboard so forked workers do not need to load it again
+    # pylint: disable-next=unused-import,import-outside-toplevel
+    from tensorboard.backend.event_processing import event_file_loader
 
   @dataclasses.dataclass
   class Context:  # LogReaderContext
@@ -201,29 +203,38 @@ class TensorboardLogReader(LogReader):
       if plugin_name == 'scalars':
         t = _read_proto(value, 'tensor')
         if t:
-          from tensorflow.python.framework.dtypes import DType
+          from tensorboard.compat.tensorflow_stub.dtypes import DType
           dtype = DType(t.dtype).as_numpy_dtype
-          simple_value = np.frombuffer(t.tensor_content, dtype=dtype)[0]
+          if hasattr(t, 'float_val'):
+            simple_value = t.float_val[0]
+          else:
+            simple_value = np.frombuffer(t.tensor_content, dtype=dtype)[0]
           yield step, value.tag, simple_value
 
   def _iter_scalar_summary_from(self, event_file, *,
                                 skip=0, limit=None,  # per event_file
                                 rows_callback):  # yapf: disable
-    from tensorflow.core.util.event_pb2 import Event
-    from tensorflow.python.lib.io import tf_record
+    from tensorboard.backend.event_processing import event_file_loader
+    if not TYPE_CHECKING:
+      from tensorboard.compat.proto.event_pb2 import Event
+    else:
 
-    def summary_iterator(path, skip=0):
-      from tensorflow.python.util import deprecation as tf_deprecation
-      with tf_deprecation.silence():  # pylint: disable=not-context-manager
-        # compatible with TF 1.x, 2.x (although deprecated)
-        eventfile_tfrecord = tf_record.tf_record_iterator(path)
-        eventfile_tfrecord = itertools.islice(
-            eventfile_tfrecord,
-            skip,
-            skip + limit if limit is not None else None,
-        )
-      for serialized_pb in eventfile_tfrecord:
-        yield Event.FromString(serialized_pb)  # type: ignore
+      class Event(NamedTuple):  # a type checking stub, see event_pb2.Event
+        step: int
+        HasField: Callable[[str], bool]
+        summary: Any
+
+    def summary_iterator(path, skip=0) -> Iterator[Event]:
+      # Requires tensorboard >= 2.3.0
+      reader = event_file_loader.LegacyEventFileLoader(file_path=path)
+      eventfile_iterator = reader.Load()
+
+      eventfile_iterator = itertools.islice(
+          eventfile_iterator,
+          skip,
+          skip + limit if limit is not None else None,
+      )
+      return eventfile_iterator  # type: ignore
 
     rows_read = 0
 
