@@ -6,6 +6,7 @@ import atexit
 import collections
 from collections import Counter
 from collections import defaultdict
+import contextlib
 import dataclasses
 import itertools
 import multiprocessing.pool
@@ -186,26 +187,21 @@ class TensorboardLogReader(LogReader):
 
   # Helper function
   def _extract_scalar_from_proto(self, value, step):
-
-    def _read_proto(node, path: str):
-      for p in path.split('.'):
-        node = getattr(node, p, None)
-        if node is None:
-          return None
-      return node
+    from tensorboard.compat.tensorflow_stub.dtypes import DType
 
     if value.HasField('simple_value'):  # v1
-      simple_value = _read_proto(value, 'simple_value')
+      simple_value = value.simple_value
       yield step, value.tag, simple_value
 
     elif value.HasField('metadata'):  # v2 eventfile
-      plugin_name = _read_proto(value, 'metadata.plugin_data.plugin_name')
+      plugin_name = None
+      with contextlib.suppress(AttributeError):
+        plugin_name = value.metadata.plugin_data.plugin_name
       if plugin_name == 'scalars':
-        t = _read_proto(value, 'tensor')
-        if t:
-          from tensorboard.compat.tensorflow_stub.dtypes import DType
+        if hasattr(value, 'tensor') and value.tensor:
+          t = value.tensor
           dtype = DType(t.dtype).as_numpy_dtype
-          if hasattr(t, 'float_val'):
+          if hasattr(t, 'float_val') and t.float_val:
             simple_value = t.float_val[0]
           else:
             simple_value = np.frombuffer(t.tensor_content, dtype=dtype)[0]
