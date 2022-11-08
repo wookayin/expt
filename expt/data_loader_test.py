@@ -37,7 +37,7 @@ def _setup_fixture():
       shutil.unpack_archive(tfile.name, FIXTURE_PATH, format='zip')
 
 
-class TestGetRuns:
+class TestGetRunsLocal:
 
   @classmethod
   def setup_class(cls):
@@ -115,6 +115,47 @@ class TestGetRuns:
 
     df_ref = _read(data_loader.TensorboardLogReader(path))
     assert np.all(df == df_ref)
+
+
+@pytest.mark.skipif('not os.getenv("EXPT_SSH_HOST")', \
+                    reason="Requires test SSH host set up manually")  # noqa
+class TestGetRunsRemote:
+  """Tests reading runs from a remote machine over SSH/SFTP.
+
+  A test SSH server is assumed to have a (git clone) copy of the `expt` repo
+  at home: i.e., the path being `~/expt`. Examples of path:
+
+    - sftp://{hostname}/expt/fixtures/sample_csv
+    - sftp://{hostname}/expt/fixtures/lr_1E-03,conv=1,fc=2
+  """
+
+  @property
+  def paths(self):
+    hostname = os.environ["EXPT_SSH_HOST"]
+    # see _setup_fixture()
+    return {
+        "sftp": f"sftp://{hostname}/expt/fixtures/sample_csv/",
+        "scp": f"scp://{hostname}/expt/fixtures/lr_1E-03,conv=1,fc=2",
+        "not_found": f"scp://{hostname}/expt/fixtures/DOES-NOT-EXIST",
+    }
+
+  def setup_method(self, method):
+    # TODO: Measure performance and run profiling.
+    print("")
+
+  def test_parse_tensorboard_ssh(self):
+    df = data_loader.parse_run_tensorboard(self.paths["scp"], verbose=True)
+    print(df)
+    assert len(df) > 200
+
+  def test_parse_pandas_ssh(self):
+    df = data_loader.parse_run_progresscsv(self.paths["sftp"], verbose=True)
+    print(df)
+    assert len(df) >= 50
+
+  def test_parse_filenotfound_ssh(self):
+    with pytest.raises(pd.errors.EmptyDataError):
+      data_loader.parse_run(self.paths["not_found"], verbose=True)
 
 
 class TestRunLoader:

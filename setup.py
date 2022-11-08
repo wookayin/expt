@@ -86,6 +86,7 @@ install_requires = [
     'pandas>=1.0',
     'multiprocess>=0.70.12',
     'typing_extensions>=4.0',
+    'python-slugify>=6.1.2',
 ]
 
 tests_requires = [

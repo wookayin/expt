@@ -14,7 +14,8 @@ import shlex
 import stat
 import subprocess
 import sys
-from typing import List, Sequence, Union
+import tempfile
+from typing import Any, List, Sequence, TYPE_CHECKING, Union
 from typing_extensions import Protocol
 import urllib.parse
 
@@ -175,6 +176,29 @@ class SFTPPathUtil(PathUtilInterface):
     with self._establish(path) as (sftp, _, remote_path):
       yield sftp.open(remote_path)
 
+  def download_local(self, path: PathType) -> 'TempFile':
+    """Fetches and download the remote file into a temporary file locally."""
+    from slugify import slugify
+    slug = slugify(_to_path_string(path)) + "-"
+    if len(slug) > 235:
+      slug = slug[-235:]
+    f = tempfile.NamedTemporaryFile(prefix=slug)
+
+    with self._establish(path) as (sftp, _, remote_path):
+      # TODO: This is blocking, very slow. Can we make it async?
+      sftp.get(remote_path, f.name, prefetch=True)
+
+    return f
+
+
+# yapf: disable
+if TYPE_CHECKING:
+  class TempFile(Protocol):  # see tempfile._TemporaryFileWrapper
+    name: str
+    def close(self): ...
+else:
+  TempFile = Any
+# yapf: enable
 
 # ---------------------------------------------------------------------------
 # Google Cloud
