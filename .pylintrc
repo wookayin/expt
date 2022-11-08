@@ -11,6 +11,7 @@ indent-after-paren=4
 disable=blacklisted-name,invalid-name,
         too-few-public-methods,no-self-use,
         wrong-import-position,
+        import-outside-toplevel,
         line-too-long,
         bad-continuation,
         fixme
