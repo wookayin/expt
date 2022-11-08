@@ -93,7 +93,10 @@ tests_requires = [
     'pytest>=5.0',  # Python 3.5+
     'pytest-cov',
     'pytest-asyncio',
+    # Optional dependencies.
     'tensorboard>=2.3',
+    'fabric~=2.6',
+    'paramiko>=2.8',
 ]
 
 setup(

@@ -1,17 +1,22 @@
 """Path (local- and remote-) related utilities."""
 
 import ast
+import contextlib
 from distutils.spawn import find_executable
+import fnmatch
 from glob import glob as local_glob
 import io
 import os
 import os.path
 from pathlib import Path
+from pathlib import PurePosixPath
 import shlex
+import stat
 import subprocess
 import sys
 from typing import List, Sequence, Union
 from typing_extensions import Protocol
+import urllib.parse
 
 PathType = Union[str, os.PathLike]
 
@@ -71,6 +76,104 @@ class LocalPathUtil(PathUtilInterface):
   def open(self, path: PathType, *, mode='r'):
     path = _to_path_string(path)
     return io.open(path, mode=mode, encoding='utf-8')
+
+
+# ---------------------------------------------------------------------------
+# SSH / SFTP / SCP
+# ---------------------------------------------------------------------------
+
+
+class SFTPPathUtil(PathUtilInterface):
+
+  @staticmethod
+  def supports(path: PathType) -> bool:
+    path = _to_path_string(path)
+    if path.startswith('sftp://') or path.startswith('scp://'):
+      try:
+        import fabric  # pylint: disable=unused-import  # noqa
+        import paramiko  # pylint: disable=unused-import  # noqa
+      except ImportError as ex:
+        raise ImportError("To use sftp://... or scp:// paths, "
+                          "'fabric' and 'paramiko' are required. " +
+                          str(ex)) from ex
+      return True
+    else:
+      return False
+
+  # TODO: Make verbosity control / logging (to see what's going on)
+
+  @contextlib.contextmanager
+  def _establish(self, path: PathType):
+    path = _to_path_string(path)
+    uri = urllib.parse.urlparse(path)
+
+    import fabric
+    with fabric.connection.Connection(
+        host=uri.hostname,
+        user=uri.username,
+        port=uri.port or 22,
+    ) as conn:  # noqa
+      with conn.sftp() as sftp:
+        remote_path = uri.path[1:] if uri.path.startswith('/') else uri.path
+        yield sftp, uri, remote_path
+
+  def glob(self, pattern: PathType) -> Sequence[str]:
+    if '**' in _to_path_string(pattern):
+      raise NotImplementedError("Globbing with double stars is not supported.")
+
+    with self._establish(pattern) as (sftp, uri, remote_path):
+
+      def walk(context: PurePosixPath, path_parts: Sequence[str]):
+        if len(path_parts) == 0:
+          yield str(context)
+          return
+
+        head, *tail = path_parts
+        dir_ls = sftp.listdir(str(context))
+        for f in dir_ls:
+          if fnmatch.fnmatch(f, head):
+            yield from walk(context / f, tail)
+
+      prefix = "".join([
+          uri.scheme + '://',
+          uri.netloc,  # username + hostname + port
+          '/',
+      ])
+
+      path_parts = PurePosixPath(remote_path).parts
+      if not path_parts:
+        return []
+      if path_parts[0] == '/':
+        # absolute path
+        context = PurePosixPath('/')
+        path_parts = path_parts[1:]
+      else:
+        # relative path from $HOME (or default cwd in SFTP)
+        context = PurePosixPath('.')
+
+      return [prefix + p for p in walk(context, path_parts)]
+
+  def exists(self, path: PathType) -> bool:
+    with self._establish(path) as (sftp, _, remote_path):
+      try:
+        sftp.stat(remote_path)
+        return True
+      except FileNotFoundError:
+        return False
+
+  def isdir(self, path: PathType) -> bool:
+    with self._establish(path) as (sftp, _, remote_path):
+      try:
+        lstat = sftp.stat(remote_path)
+        return stat.S_ISDIR(lstat.st_mode)  # type: ignore
+      except FileNotFoundError:
+        return False
+
+  @contextlib.contextmanager
+  def open(self, path: PathType, *, mode='r'):
+    # Open a remote file, e.g., `with open(...) as f:`
+    with self._establish(path) as (sftp, _, remote_path):
+      yield sftp.open(remote_path)
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +308,7 @@ def use_gsutil(value: bool):
 
 BACKENDS = [
     GCloudPathUtil(),
+    SFTPPathUtil(),
     LocalPathUtil(),
 ]
 

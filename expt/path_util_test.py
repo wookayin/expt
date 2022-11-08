@@ -51,6 +51,40 @@ def test_local_file():
     assert 'episode_rewards' in line
 
 
+@pytest.mark.skipif('not os.getenv("EXPT_SSH_HOST")', \
+                    reason="Requires test SSH host set up manually")  # noqa
+@pytest.mark.parametrize("protocol", ["sftp", "scp"])
+def test_ssh(protocol: str):
+  """Tests sftp:// files."""
+  sys.stdout.write("ssh\n")
+
+  host = os.environ["EXPT_SSH_HOST"]
+  uri_base = f"{protocol}://{host}:2222"
+
+  bashrc = uri_base + "/.bashrc"
+  directory = uri_base + "/.ssh"
+  not_exist = uri_base + "/__NOT_EXIST__"
+
+  assert P.exists(bashrc) is True
+  assert P.exists(not_exist) is False
+
+  with P.open(bashrc) as f:
+    lines = f.readlines()
+  assert (lines.__len__() > 0)
+
+  assert P.isdir(bashrc) is False
+  assert P.isdir(directory) is True
+  assert P.isdir(not_exist) is False
+
+  glob = V(P.glob(uri_base + "/.*bash*"))
+  assert bashrc in glob
+
+  glob = V(P.glob(uri_base + "//etc/*bashrc*"))
+  assert glob
+
+  glob = V(P.glob(uri_base + "/.ss*/*s*"))
+
+
 @pytest.mark.slow
 def test_gcloud():
   """Tests gs:// files.
