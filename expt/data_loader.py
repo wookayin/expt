@@ -29,6 +29,11 @@ try:
 except ImportError:
   tqdm = util.NoopTqdm
 
+try:
+  import tensorboard
+except ImportError:
+  tensorboard = None
+
 #########################################################################
 # Individual Run Reader
 #########################################################################
@@ -96,9 +101,11 @@ def parse_run(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
       df = fn(log_dir, fillna=fillna, verbose=verbose)
       if df is not None:
         break
-    except (FileNotFoundError, IOError) as e:
+    # TODO: Wanna throw IOError or shallow?
+    except (FileNotFoundError, IOError) as ex:
       if verbose:
-        print(f"{fn.__name__} -> {e}\n", file=sys.stderr, flush=True)
+        exc_msg = '{}: {}'.format(type(ex).__name__, ex)
+        print(f"{fn.__name__} -> {exc_msg}", file=sys.stderr, flush=True)
   else:
     raise pd.errors.EmptyDataError(  # type: ignore
         f"Cannot handle dir: {log_dir}")
@@ -149,7 +156,7 @@ class CSVLogReader(LogReader[pd.DataFrame]):
             file=sys.stderr, flush=True)  # yapf: disable
 
     df: pd.DataFrame
-    with open(self._csv_path, mode='r', encoding='utf-8') as f:
+    with path_util.open(self._csv_path, mode='r') as f:
       df = pd.read_csv(f)  # type: ignore
 
     return df
@@ -160,6 +167,42 @@ class CSVLogReader(LogReader[pd.DataFrame]):
     if fillna:
       df = df.fillna(0)
     return df
+
+
+if tensorboard or TYPE_CHECKING:
+  from tensorboard.backend.event_processing import event_file_loader
+
+  class RemoteAwareEventFileLoader(event_file_loader.LegacyEventFileLoader):
+    """An iterator that yields parsed Event protos over remote a file.
+
+    This supports other protocols such as sftp:// like expt.path_util do;
+    tensorboard's event file loader supports local and gcs:// paths only.
+
+    Currently, the GFile backend (PyRecordReader_New in tensorboard's TF stub
+    or the tensorflow.io core module) can support ONLY local and GCS files,
+    no way to open a file through a python IO (io.IOBase) or an unix socket.
+    The only way to read from a remote file (via SSH/SFTP) is actually to
+    download and stream the remote file into a local, temporary file
+    (for the sake of maximum throughput).
+
+    Note: .close() must be called otherwise a resource/connection will leak.
+    """
+
+    def __init__(self, path: str):
+      if path_util.SFTPPathUtil.supports(path):
+        # TODO: Verbose logging of file path, etc.
+        # TODO: This is blocking in a thread. Add an asynchronous version.
+        local_file = path_util.SFTPPathUtil().download_local(path)
+        self._local_file = local_file
+        super().__init__(local_file.name)
+      else:
+        super().__init__(path)
+
+    def close(self):
+      try:
+        self._local_file.close()
+      except IOError:
+        pass
 
 
 class TensorboardLogReader(  # ...
@@ -177,9 +220,9 @@ class TensorboardLogReader(  # ...
     if not self._event_files:  # no event file detected
       raise FileNotFoundError(f"No event file detected in {self.log_dir}")
 
-    # Try importing tensorboard so forked workers do not need to load it again
-    # pylint: disable-next=unused-import,import-outside-toplevel
-    from tensorboard.backend.event_processing import event_file_loader
+    # Ensure tensorboard is imported, so forked workers don't need to load again
+    # pylint: disable-next=all
+    import tensorboard.backend.event_processing
 
   @dataclasses.dataclass
   class Context:  # LogReaderContext
@@ -215,7 +258,6 @@ class TensorboardLogReader(  # ...
   def _iter_scalar_summary_from(self, event_file, *,
                                 skip=0, limit=None,  # per event_file
                                 rows_callback):  # yapf: disable
-    from tensorboard.backend.event_processing import event_file_loader
     if not TYPE_CHECKING:
       from tensorboard.compat.proto.event_pb2 import Event
     else:
@@ -227,7 +269,7 @@ class TensorboardLogReader(  # ...
 
     def summary_iterator(path, skip=0) -> Iterator[Event]:
       # Requires tensorboard >= 2.3.0
-      reader = event_file_loader.LegacyEventFileLoader(file_path=path)
+      reader = RemoteAwareEventFileLoader(path)
       eventfile_iterator = reader.Load()
 
       eventfile_iterator = itertools.islice(
