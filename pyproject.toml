@@ -1,3 +1,78 @@
+[build-system]
+requires = ["setuptools >= 64.0", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# Project metadata as per PEP-621 (setuptools>=61.0)
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
+name = 'expt'
+requires-python = '>=3.7'
+description = 'EXperiment. Plot. Tabulate.'
+authors = [
+  {name ='Jongwook Choi', email = 'wookayin@gmail.com'},
+]
+license = {file = "LICENSE"}
+readme = {file = "README.md", content-type = "text/markdown"}
+
+# Automatically assign version via expt.__version__
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
+dynamic = [
+  'version',
+]
+
+classifiers = [
+# https://pypi.python.org/pypi?%3Aaction=list_classifiers
+  'Development Status :: 3 - Alpha',
+  'License :: OSI Approved :: MIT License',
+  'Operating System :: POSIX :: Linux',
+  'Programming Language :: Python :: 3.7',
+  'Programming Language :: Python :: 3.8',
+  'Programming Language :: Python :: 3.9',
+  'Programming Language :: Python :: 3.10',
+  'Programming Language :: Python :: 3.11',
+  'Topic :: Utilities',
+  'Topic :: Scientific/Engineering',
+]
+
+# PEP-631
+dependencies = [
+  'numpy>=1.16.5',
+  'scipy',
+  'typeguard>=2.6.1',
+  'matplotlib>=3.0.0',
+  'pandas>=1.0',
+  'multiprocess>=0.70.12',
+  'typing_extensions>=4.0',
+  'python-slugify>=6.1.2',
+]
+
+[project.optional-dependencies]
+test = [
+  'mock>=2.0.0',
+  'pytest>=6.0',
+  'pytest-cov',
+  'pytest-asyncio',
+  # Optional dependencies.
+  'tensorboard>=2.3',
+  'fabric~=2.6',
+  'paramiko>=2.8',
+]
+
+[project.urls]
+Homepage = 'https://github.com/wookayin/expt'
+Repository = 'https://github.com/wookayin/expt'
+
+[tools.setuptools]
+packages = ["expt"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["expt"]
+
+[tool.setuptools.dynamic]
+version = {attr = "expt.__version__"}
+
+
 [tool.isort]
 # https://pycqa.github.io/isort/docs/configuration/options.html
 profile = "google"
@@ -6,10 +81,10 @@ extra_standard_library = ['typing_extensions']
 
 [tool.pytest.ini_options]
 markers = [
-    "slow: marks tests as slow (runnable with --run-slow)",
-    "serial",
+  "slow: marks tests as slow (runnable with --run-slow)",
+  "serial",
 ]
 filterwarnings = [
-    "ignore:Call to deprecated create function .*Descriptor:DeprecationWarning",
-    "ignore:.*is deprecated and will be removed in Pillow 10:DeprecationWarning",
+  "ignore:Call to deprecated create function .*Descriptor:DeprecationWarning",
+  "ignore:.*is deprecated and will be removed in Pillow 10:DeprecationWarning",
 ]

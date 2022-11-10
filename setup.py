@@ -1,140 +1,32 @@
-"""setup.py for expt"""
+"""setup.py for expt. Deprecated as per PEP-621."""
 
-import os
-import re
+import shlex
 import sys
+import textwrap
 
-from setuptools import Command
-from setuptools import setup
+join = shlex.join if sys.version_info >= (3, 8) else (lambda t: ' '.join(t))
 
-__PATH__ = os.path.abspath(os.path.dirname(__file__))
+if 'pep517' in sys.argv[0]:
+  pass  # invoked as a part of PEP-517 aware pip command
 
+elif len(sys.argv) >= 2 and sys.argv[1] in ('install', 'develop'):
+  sys.stderr.write("Invoked as: " + join(sys.argv) + '\n\n')
+  sys.stderr.write(textwrap.dedent(
+    """\
+    Warning: expt no longer supports installation via `python setup.py ...`
+      as per PEP-621: https://peps.python.org/pep-0621/.
 
-def read_readme():
-  with open('README.md') as f:
-    return f.read()
+    If you have cloned the repository locally, please use the following cmd:
+        $ python -m pip install .       # or,
+        $ python -m pip install -e .    # for editable mode
 
+    If you are already trying `pip install` and still seeing this error,
+      then build configuration in `pyproject.toml` would have some problem.
+    """))  # yapf: disable
+  sys.exit(1)
 
-def read_version():
-  __PATH__ = os.path.abspath(os.path.dirname(__file__))
-  with open(os.path.join(__PATH__, 'expt/__init__.py')) as f:
-    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]",
-                              f.read(), re.M)  # yapf: disable
-  if version_match:
-    return version_match.group(1)
-  raise RuntimeError("Unable to find __version__ string")
+# See pyproject.toml for project metadata.
+# These lines are only for the sake of Github package metadata.
+from setuptools import setup  # noqa
 
-
-__version__ = read_version()
-
-
-# brought from https://github.com/kennethreitz/setup.py
-class DeployCommand(Command):
-  description = 'Build and deploy the package to PyPI.'
-  user_options = []
-
-  def initialize_options(self):
-    pass
-
-  def finalize_options(self):
-    pass
-
-  @staticmethod
-  def status(s):
-    print(s)
-
-  def run(self):
-    import twine  # we require twine locally  # noqa
-
-    assert 'dev' not in __version__, ("Only non-devel versions are allowed. "
-                                      "__version__ == {}".format(__version__))
-
-    with os.popen("git status --short") as fp:
-      git_status = fp.read().strip()
-      if git_status:
-        print("Error: git repository is not clean.\n")
-        os.system("git status --short")
-        sys.exit(1)
-
-    try:
-      from shutil import rmtree
-      self.status('Removing previous builds ...')
-      rmtree(os.path.join(__PATH__, 'dist'))
-    except OSError:
-      pass
-
-    self.status('Building Source and Wheel (universal) distribution ...')
-    os.system('{0} setup.py sdist'.format(sys.executable))
-
-    self.status('Uploading the package to PyPI via Twine ...')
-    ret = os.system('twine upload dist/*')
-    if ret != 0:
-      sys.exit(ret)
-
-    self.status('Creating git tags ...')
-    os.system('git tag v{0}'.format(__version__))
-    os.system('git tag --list')
-    sys.exit()
-
-
-install_requires = [
-    'numpy>=1.16.5',
-    'scipy',
-    'typeguard>=2.6.1',
-    'matplotlib>=3.0.0',
-    'pandas>=1.0',
-    'multiprocess>=0.70.12',
-    'typing_extensions>=4.0',
-    'python-slugify>=6.1.2',
-]
-
-tests_requires = [
-    'mock>=2.0.0',
-    'pytest>=7.0',
-    'pytest-cov',
-    'pytest-asyncio',
-    # Optional dependencies.
-    'tensorboard>=2.3',
-    'fabric~=2.6',
-    'paramiko>=2.8',
-]
-
-setup(
-    name='expt',
-    version=__version__,
-    license='MIT',
-    description='EXperiment. Plot. Tabulate.',
-    long_description=read_readme(),
-    long_description_content_type='text/markdown',
-    url='https://github.com/wookayin/expt',
-    author='Jongwook Choi',
-    author_email='wookayin@gmail.com',
-    #keywords='',
-    classifiers=[
-        # https://pypi.python.org/pypi?%3Aaction=list_classifiers
-        'Development Status :: 3 - Alpha',
-        'License :: OSI Approved :: MIT License',
-        'Operating System :: POSIX :: Linux',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
-        'Programming Language :: Python :: 3.11',
-        'Topic :: Utilities',
-        'Topic :: Scientific/Engineering',
-    ],
-    packages=['expt'],
-    install_requires=install_requires,
-    extras_require={'test': tests_requires},
-    setup_requires=['pytest-runner'],
-    tests_require=tests_requires,
-    entry_points={
-        #'console_scripts': ['expt=expt:main'],
-    },
-    cmdclass={
-        'deploy': DeployCommand,
-    },
-    include_package_data=True,
-    zip_safe=False,
-    python_requires='>=3.7',
-)
+setup(name='expt')

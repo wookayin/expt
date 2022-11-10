@@ -7,6 +7,7 @@ import sys
 if sys.version_info < (3, 7):
   raise RuntimeError("This library requires python 3.7+.")
 
+# See pyproject.toml
 __version__ = '0.5.0.dev2'
 
 # auto-import submodules
