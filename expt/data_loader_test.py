@@ -145,8 +145,8 @@ class TestRunLoader:
       return run
 
     loader = data_loader.RunLoader(
-        *paths, run_postprocess_fn=postprocess, n_jobs=4)
-    runs = loader.get_runs()
+        *paths, run_postprocess_fn=postprocess, n_jobs=1)
+    runs = loader.get_runs(parallel=False)
 
     assert len(runs) == len(paths)
     for r, p in zip(runs, paths):

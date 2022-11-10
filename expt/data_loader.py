@@ -3,7 +3,6 @@
 import abc
 import asyncio
 import atexit
-import collections
 from collections import Counter
 from collections import defaultdict
 import contextlib
@@ -13,7 +12,7 @@ import multiprocessing.pool
 import os
 from pathlib import Path
 import sys
-from typing import (Any, Callable, Generator, Iterator, NamedTuple, Optional,
+from typing import (Any, Callable, Generic, Iterator, NamedTuple, Optional,
                     Tuple, TYPE_CHECKING, TypeVar, Union)
 
 import multiprocess.pool
@@ -37,7 +36,7 @@ except ImportError:
 LogReaderContext = TypeVar('LogReaderContext')
 
 
-class LogReader:
+class LogReader(abc.ABC, Generic[LogReaderContext]):
   """Interface for reading logs.
 
   LogReaders should maintain its internal state stored in a context object,
@@ -52,7 +51,7 @@ class LogReader:
     return self._log_dir
 
   @abc.abstractmethod
-  def new_context(self) -> LogReaderContext:  # type: ignore
+  def new_context(self) -> LogReaderContext:
     """Create a new, empty context. This context can be used to store
     all the internal states or data for reading logs. Or it can be a Process
     object if you want a daemon reader process running in the background.
@@ -110,7 +109,7 @@ def parse_run(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
   return df
 
 
-class CSVLogReader(LogReader):
+class CSVLogReader(LogReader[pd.DataFrame]):
   """Parse log data from progress.csv per convention."""
 
   def __init__(self, log_dir):
@@ -136,8 +135,13 @@ class CSVLogReader(LogReader):
 
     self._csv_path = detected_csv
 
-  def read(self, context, verbose=False):
-    del context  # unused, this implementation always read the data in full.
+  def new_context(self) -> pd.DataFrame:
+    return pd.DataFrame()
+
+  def read(self, context: pd.DataFrame, verbose=False) -> pd.DataFrame:
+    # unused, this implementation always ignore the previous context
+    # and read the data in full (no incremental reading).
+    del context
 
     # Read the detected file `p`
     if verbose:
@@ -150,7 +154,7 @@ class CSVLogReader(LogReader):
 
     return df
 
-  def result(self, context, fillna=False) -> pd.DataFrame:
+  def result(self, context: pd.DataFrame, fillna=False) -> pd.DataFrame:
     df = context
     assert isinstance(df, pd.DataFrame)
     if fillna:
@@ -158,7 +162,8 @@ class CSVLogReader(LogReader):
     return df
 
 
-class TensorboardLogReader(LogReader):
+class TensorboardLogReader(  # ...
+    LogReader['TensorboardLogReader.Context']):  # type: ignore  # noqa
   """Log reader for tensorboard run directory."""
 
   def __init__(self, log_dir):
@@ -276,7 +281,7 @@ class TensorboardLogReader(LogReader):
 
     return context
 
-  def result(self, context) -> pd.DataFrame:
+  def result(self, context: 'Context') -> pd.DataFrame:
     # Reorder column names in a lexicographical order
     df = context.data
     df = df.reindex(sorted(df.columns), axis=1)
