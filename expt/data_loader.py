@@ -436,7 +436,6 @@ def _handle_path(p, verbose, run_postprocess_fn=None) -> Optional[Run]:
     return None
 
 
-# TODO: Deprecate in favor of RunLoader.
 def get_runs_parallel(
     *path_globs,
     verbose=False,
@@ -450,71 +449,22 @@ def get_runs_parallel(
   This runs in parallel, using the multiprocess library (a fork of python
   standard library multiprocessing) which is more friendly with ipython
   and serializing non-picklable objects.
+
+  Deprecated: Use expt.RunLoader instead.
   """
 
-  if isinstance(pool_class, str):
-    Pool = {
-        'threading': multiprocess.pool.ThreadPool,
-        'multiprocess': multiprocess.pool.Pool,  # third-party (works better)
-        'multiprocessing': multiprocessing.pool.Pool,  # python stdlib
-    }.get(pool_class, None)
-    if not Pool:
-      raise ValueError("Unknown pool_class: {} ".format(pool_class) +
-                       "(expected: threading or multiprocessing)")
-  elif callable(pool_class):
-    Pool = pool_class
-  else:
-    raise TypeError("Unknown type for pool_class: {}".format(pool_class))
-
-  with Pool(processes=n_jobs) as pool:  # type: ignore
-    pbar = tqdm(total=1) if progress_bar else util.NoopTqdm()
-
-    def _pbar_callback_done(run):
-      del run  # unused
-      pbar.update(1)
-      pbar.refresh()
-
-    def _pbar_callback_error(e):
-      del e  # unused
-      pbar.bar_style = 'danger'  # type: ignore
-
-    futures = []
-    for path_glob in path_globs:
-      paths = list(sorted(path_util.glob(path_glob)))
-      if verbose and not paths:
-        print(f"Warning: a glob pattern '{path_glob}' "
-              "did not match any files.", file=sys.stderr)  # yapf: disable
-
-      for p in paths:
-        future = pool.apply_async(
-            _handle_path,
-            args=[p, verbose, run_postprocess_fn],
-            callback=_pbar_callback_done,
-            error_callback=_pbar_callback_error)
-        futures.append(future)
-
-      # The total number can grow while some jobs are running.
-      _completed = int(pbar.n)
-      pbar.reset(total=len(futures))
-      pbar.n = pbar.last_print_n = _completed
-      pbar.refresh()
-
-    hits = 0
-    result = []
-    for future in futures:
-      run: Optional[Run] = future.get()
-      if run:
-        hits += 1
-        result.append(run)
-
-    # All runs have been collected, close the progress bar.
-    pbar.close()
-
-  if not hits:
-    for path_glob in path_globs:
-      print(f"Warning: No match found for pattern {path_glob}",
-            file=sys.stderr)  # yapf: disable
-  return RunList(result)
+  loader = RunLoader(
+      *path_globs,
+      verbose=verbose,
+      progress_bar=progress_bar,
+      run_postprocess_fn=run_postprocess_fn,
+      n_jobs=n_jobs,
+      pool_class=pool_class,
+  )
+  try:
+    return loader.get_runs()
+  finally:
+    loader.close()
 
 
 get_runs = get_runs_parallel
@@ -534,6 +484,7 @@ class RunLoader:
       progress_bar: bool = True,
       run_postprocess_fn: Optional[Callable[[Run], Run]] = None,
       n_jobs: int = 8,
+      pool_class=multiprocess.pool.Pool,
   ):
     self._readers = []
     self._reader_contexts = []
@@ -546,7 +497,20 @@ class RunLoader:
 
     # Initialize multiprocess pool.
     if n_jobs > 1:
-      self._pool = multiprocess.pool.Pool(processes=n_jobs)
+      if isinstance(pool_class, str):
+        Pool = {
+            'threading': multiprocess.pool.ThreadPool,
+            'multiprocess': multiprocess.pool.Pool,  # third-party (better)
+            'multiprocessing': multiprocessing.pool.Pool,  # python stdlib
+        }.get(pool_class, None)
+        if not Pool:
+          raise ValueError("Unknown pool_class: {} ".format(pool_class) +
+                           "(expected: threading or multiprocessing)")
+      elif callable(pool_class):
+        Pool = pool_class
+      else:
+        raise TypeError("Unknown type for pool_class: {}".format(pool_class))
+      self._pool = Pool(processes=n_jobs)
     else:
       self._pool = None
 

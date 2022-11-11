@@ -1,3 +1,7 @@
+"""The expt module."""
+# pylint: disable=useless-import-alias
+# flake8: noqa
+
 import sys
 
 if sys.version_info < (3, 6):
@@ -17,3 +21,4 @@ from .data import Run as Run
 from .data import RunList as RunList
 from .data_loader import get_runs as get_runs
 from .data_loader import parse_run as parse_run
+from .data_loader import RunLoader as RunLoader
