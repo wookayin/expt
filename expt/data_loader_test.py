@@ -60,7 +60,13 @@ class TestParseRun:
     r = data_loader.parse_run(path_tensorboard)
     assert len(r) >= 400
     np.testing.assert_array_equal(
-        r.columns, ['accuracy/accuracy', 'global_step', 'xent/xent_1'])
+        r.columns,
+        ['accuracy/accuracy', 'global_step', 'xent/xent_1'],
+    )
+    np.testing.assert_array_equal(
+        r.index,
+        np.arange(0, 2000 + 1, 5),
+    )
 
   def test_parse_progresscsv(self, path_csv):
     r = data_loader.parse_run(path_csv)
@@ -81,6 +87,9 @@ class TestParseRun:
 
     with pytest.raises(data_loader.CannotHandleException):
       data_loader.TensorboardLogReader(path_csv)
+
+    with pytest.raises(data_loader.CannotHandleException):
+      data_loader.RustTensorboardLogReader(path_csv)
 
     with pytest.raises(data_loader.CannotHandleException):
       data_loader.parse_run_tensorboard(path_csv)
@@ -139,6 +148,22 @@ class TestParseRun:
     # The result should be identical as non-incremental read.
     df_ref = data_loader.TensorboardLogReader(path_tensorboard).read_once()
     assert np.all(df == df_ref)
+
+  def test_parse_tensorboard_fast_with_rust(self):
+    parser = data_loader.RustTensorboardLogReader(
+        Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2")
+    ctx = parser.read(parser.new_context())
+    df: pd.DataFrame = parser.result(ctx)
+
+    assert len(df) >= 400
+    np.testing.assert_array_equal(
+        sorted(df.columns),
+        sorted(['accuracy/accuracy', 'global_step', 'xent/xent_1']),
+    )
+    np.testing.assert_array_equal(
+        df.index,
+        np.arange(0, 2000 + 1, 5),
+    )
 
 
 class TestGetRunsRemote:

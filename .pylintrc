@@ -16,4 +16,5 @@ disable=blacklisted-name,
         import-outside-toplevel,
         line-too-long,
         consider-using-f-string,
+        c-extension-no-member,
         fixme

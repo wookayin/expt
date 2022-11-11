@@ -1,0 +1,23 @@
+[package]
+name = "expt_ext"
+authors = ["Jongwook Choi <wookayin@gmail.com>"]
+version = "0.5.0-alpha1"
+
+edition = "2018"
+
+[lib]
+name = "expt_ext"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.17.3", features = ["extension-module"] }
+rustboard = { git = "https://github.com/tensorflow/tensorboard", tag = "2.11.0" }
+
+# See tensorflow/tensorboard#6040 for conflicts on transitive clap dependencies
+clap = "=3.0.0-beta.2"
+clap_derive = "=3.0.0-beta.2"
+
+[features]
+generate-import-lib = ["pyo3/generate-import-lib"]
+extension-module = ["pyo3/extension-module"]
+default = ["extension-module"]

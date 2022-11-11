@@ -1,3 +1,6 @@
+[build-system]
+requires = ["setuptools >= 64.0", "wheel", "setuptools-rust"]
+
 [tool.isort]
 # https://pycqa.github.io/isort/docs/configuration/options.html
 profile = "google"
@@ -6,10 +9,10 @@ extra_standard_library = ['typing_extensions']
 
 [tool.pytest.ini_options]
 markers = [
-    "slow: marks tests as slow (runnable with --run-slow)",
-    "serial",
+  "slow: marks tests as slow (runnable with --run-slow)",
+  "serial",
 ]
 filterwarnings = [
-    "ignore:Call to deprecated create function .*Descriptor:DeprecationWarning",
-    "ignore:.*is deprecated and will be removed in Pillow 10:DeprecationWarning",
+  "ignore:Call to deprecated create function .*Descriptor:DeprecationWarning",
+  "ignore:.*is deprecated and will be removed in Pillow 10:DeprecationWarning",
 ]

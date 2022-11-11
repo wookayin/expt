@@ -3,9 +3,23 @@
 import os
 import re
 import sys
+import textwrap
 
 from setuptools import Command
 from setuptools import setup
+
+try:
+  from setuptools_rust import Binding
+  from setuptools_rust import RustExtension
+except ImportError:
+  sys.stderr.write(textwrap.dedent(
+      """\
+          Error: setuptools_rust cannot be imported.
+          Runnig setup.py like `python setup.py` is deprecated.
+
+          Please run `pip install .` or `pip install -e .[test]` instead.
+      """))  # yapf: disable  # noqa
+  sys.exit(1)
 
 __PATH__ = os.path.abspath(os.path.dirname(__file__))
 
@@ -89,6 +103,7 @@ install_requires = [
 ]
 
 tests_requires = [
+    'setuptools-rust',
     'mock>=2.0.0',
     'pytest>=7.0',
     'pytest-cov',
@@ -124,9 +139,14 @@ setup(
         'Topic :: Scientific/Engineering',
     ],
     packages=['expt'],
+    rust_extensions=[
+        RustExtension("expt._internal", binding=Binding.PyO3, \
+                      debug=False  # Always use --release (optimized) build
+                      ),
+    ],
     install_requires=install_requires,
     extras_require={'test': tests_requires},
-    setup_requires=['pytest-runner'],
+    setup_requires=['setuptools-rust'],
     tests_require=tests_requires,
     entry_points={
         #'console_scripts': ['expt=expt:main'],
