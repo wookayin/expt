@@ -30,6 +30,12 @@ try:
 except ImportError:
   tqdm = util.NoopTqdm
 
+if TYPE_CHECKING:
+  from tqdm import tqdm as tqdm_std
+  ProgressBar = Union[tqdm, tqdm_std]
+else:
+  ProgressBar = Any
+
 try:
   import tensorboard
 except ImportError:
@@ -599,7 +605,10 @@ class RunLoader:
       print(f"[!] {reader.log_dir} : {e}", file=sys.stderr, flush=True)
       return None, context
 
-  def get_runs(self, parallel=True, *, tqdm_bar=None) -> RunList:
+  def get_runs(self,
+               *,
+               parallel=True,
+               tqdm_bar: Optional[ProgressBar] = None) -> RunList:
     """Refresh and get all the runs from all the log directories.
 
     This will work as incremental reading: the portion of data that was read
@@ -613,7 +622,7 @@ class RunLoader:
 
     # Reload the data (incrementally or read from scratch) and return runs.
     if self._pool is None or not parallel:
-      return self._get_runs_serial()
+      return self._get_runs_serial(tqdm_bar=tqdm_bar)
 
     else:
       pool = self._pool
@@ -664,7 +673,7 @@ class RunLoader:
 
     return RunList(result)
 
-  def _get_runs_serial(self) -> RunList:
+  def _get_runs_serial(self, tqdm_bar: Optional[ProgressBar] = None) -> RunList:
     """Non-parallel version of get_runs().
 
     It might be useful for debugging, but also might be faster for smaller
@@ -673,8 +682,11 @@ class RunLoader:
     (which can often take up to 1~2 seconds).
     """
     runs = []
-    pbar = tqdm(total=len(self._readers)) \
-      if self._progress_bar else util.NoopTqdm()  # noqa: E127
+
+    pbar = tqdm_bar
+    if pbar is None:
+      pbar = tqdm(total=len(self._readers)) \
+        if self._progress_bar else util.NoopTqdm()  # noqa: E127
 
     for j, reader in enumerate(self._readers):
       run, new_context = self._worker_handler(
@@ -688,19 +700,27 @@ class RunLoader:
         runs.append(run)
       pbar.update(1)
 
+    pbar.close()
     return RunList(runs)
 
   # Asynchronous execution in a thread.
   _get_runs_async = util.wrap_async(get_runs)
 
-  async def get_runs_async(self, polling_interval=0.5, **kwargs):
+  async def get_runs_async(self,
+                           polling_interval=0.5,
+                           tqdm_bar: Optional[ProgressBar] = None,
+                           **kwargs):
     """Asynchronous version of get_runs().
 
     This wraps get_runs() to be executed in a thread, so that the UI does not
     block while the loader is fetching and processing runs. Specifically,
     the tqdm progress bar could be updated when shown as a jupyter widget.
     """
-    pbar = tqdm(total=len(self._readers))
+    if tqdm_bar is None:
+      pbar = tqdm(total=len(self._readers))
+    else:
+      pbar = tqdm_bar
+
     loop = asyncio.get_event_loop()
     future = loop.create_task(self._get_runs_async(tqdm_bar=pbar, **kwargs))
     while not future.done():

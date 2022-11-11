@@ -222,9 +222,10 @@ class TestRunLoader:
       np.testing.assert_array_equal(r.df, r2.df)
 
   @pytest.mark.asyncio
-  async def test_run_loader_async(self):
+  @pytest.mark.parametrize("parallel_mode", ['parallel', 'serial'])
+  async def test_run_loader_async(self, parallel_mode):
     loader = data_loader.RunLoader(*self.paths)
-    runs = await loader.get_runs_async(parallel=False)
+    runs = await loader.get_runs_async(parallel=(parallel_mode == 'parallel'))
     assert len(runs) == len(self.paths)
     assert [r.path for r in runs] == [str(p) for p in self.paths]
 

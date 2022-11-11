@@ -58,6 +58,7 @@ class NoopTqdm:
     del args, kwargs  # unused
     self.total = self.max = 0
     self.n = self.last_print_n = 0
+    self.leave = False
 
   def noop(self, *args, **kwargs):  # pylint: disable=C0116
     del args, kwargs  # unused
