@@ -83,7 +83,7 @@ class LogReader(abc.ABC, Generic[LogReaderContext]):
     return f"<{type(self).__name__}, log_dir={self.log_dir}>"
 
 
-def parse_run(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
+def parse_run(log_dir, verbose=False) -> pd.DataFrame:
   """Create a pd.DataFrame object from a single directory."""
   if verbose:
     # TODO Use python logging
@@ -98,7 +98,7 @@ def parse_run(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
 
   for fn in sources:
     try:
-      df = fn(log_dir, fillna=fillna, verbose=verbose)
+      df = fn(log_dir, verbose=verbose)
       if df is not None:
         break
     # TODO: Wanna throw IOError or shallow?
@@ -161,11 +161,9 @@ class CSVLogReader(LogReader[pd.DataFrame]):
 
     return df
 
-  def result(self, context: pd.DataFrame, fillna=False) -> pd.DataFrame:
+  def result(self, context: pd.DataFrame) -> pd.DataFrame:
     df = context
     assert isinstance(df, pd.DataFrame)
-    if fillna:
-      df = df.fillna(0)
     return df
 
 
@@ -330,14 +328,13 @@ class TensorboardLogReader(  # ...
     return df
 
 
-def parse_run_progresscsv(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
+def parse_run_progresscsv(log_dir, verbose=False) -> pd.DataFrame:
   parser = CSVLogReader(log_dir)
   ctx = parser.read(parser.new_context(), verbose=verbose)
-  return parser.result(ctx, fillna=fillna)
+  return parser.result(ctx)
 
 
-def parse_run_tensorboard(log_dir, fillna=False, verbose=False) -> pd.DataFrame:
-  del fillna  # unused
+def parse_run_tensorboard(log_dir, verbose=False) -> pd.DataFrame:
   parser = TensorboardLogReader(log_dir)
   ctx = parser.read(parser.new_context(), verbose=verbose)
   return parser.result(ctx)
@@ -375,7 +372,6 @@ def _validate_run_postprocess(run):
 def iter_runs_serial(
     *path_globs,
     verbose=False,
-    fillna=True,
     run_postprocess_fn=None,
 ) -> Iterator[Run]:
   """Enumerate Run objects from the given path(s)."""
@@ -386,7 +382,7 @@ def iter_runs_serial(
 
     paths = list(sorted(path_util.glob(path_glob)))
     for p in paths:
-      run = _handle_path(p, verbose=verbose, fillna=fillna,
+      run = _handle_path(p, verbose=verbose,
                          run_postprocess_fn=run_postprocess_fn,
                          )  # yapf: disable
       if run:
@@ -395,7 +391,6 @@ def iter_runs_serial(
 
 def get_runs_serial(*path_globs,
                     verbose=False,
-                    fillna=True,
                     run_postprocess_fn=None) -> RunList:
   """Get a list of Run objects from the given path(s).
 
@@ -404,10 +399,7 @@ def get_runs_serial(*path_globs,
   """
   runs = list(
       iter_runs_serial(
-          *path_globs,
-          verbose=verbose,
-          fillna=fillna,
-          run_postprocess_fn=run_postprocess_fn))
+          *path_globs, verbose=verbose, run_postprocess_fn=run_postprocess_fn))
 
   if not runs:
     for path_glob in path_globs:
@@ -417,9 +409,9 @@ def get_runs_serial(*path_globs,
   return RunList(runs)
 
 
-def _handle_path(p, verbose, fillna, run_postprocess_fn=None) -> Optional[Run]:
+def _handle_path(p, verbose, run_postprocess_fn=None) -> Optional[Run]:
   try:
-    df = parse_run(p, verbose=verbose, fillna=fillna)
+    df = parse_run(p, verbose=verbose)
     run = Run(path=p, df=df)
     if run_postprocess_fn:
       run = run_postprocess_fn(run)
@@ -436,7 +428,6 @@ def get_runs_parallel(
     *path_globs,
     verbose=False,
     n_jobs=8,
-    fillna=True,
     pool_class=multiprocess.pool.Pool,
     progress_bar=True,
     run_postprocess_fn=None,
@@ -484,7 +475,7 @@ def get_runs_parallel(
       for p in paths:
         future = pool.apply_async(
             _handle_path,
-            args=[p, verbose, fillna, run_postprocess_fn],
+            args=[p, verbose, run_postprocess_fn],
             callback=_pbar_callback_done,
             error_callback=_pbar_callback_error)
         futures.append(future)
