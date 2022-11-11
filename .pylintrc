@@ -8,10 +8,12 @@ indent-after-paren=4
 [MESSAGES CONTROL]
 
 # [List] http://pylint-messages.wikidot.com/all-codes
-disable=blacklisted-name,invalid-name,
-        too-few-public-methods,no-self-use,
+disable=blacklisted-name,
+        invalid-name,
+        too-few-public-methods,
+        missing-function-docstring,
         wrong-import-position,
         import-outside-toplevel,
         line-too-long,
-        bad-continuation,
+        consider-using-f-string,
         fixme
