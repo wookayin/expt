@@ -1,3 +1,5 @@
+"""Utility for color."""
+
 import sys
 
 _thismodule = sys.modules[__name__]

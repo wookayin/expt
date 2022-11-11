@@ -10,6 +10,7 @@ import dataclasses
 import itertools
 import multiprocessing.pool
 import os
+import pathlib
 from pathlib import Path
 import sys
 from typing import (Any, Callable, Generic, Iterator, NamedTuple, Optional,
@@ -46,10 +47,16 @@ class LogReader(abc.ABC, Generic[LogReaderContext]):
 
   LogReaders should maintain its internal state stored in a context object,
   so that it can work even in a forked multiprocess worker.
+
+  Note that LogReaders must be forkable (i.e., serialize and deserialize)
+  and its context object must be serializable so as to be sent to multiprocess.
   """
 
   def __init__(self, log_dir):
-    self._log_dir = log_dir
+    if not isinstance(log_dir, (pathlib.Path, str)):
+      raise TypeError(f"`log_dir` must be a `str` or `Path`,"
+                      f" but given {type(log_dir)}")
+    self._log_dir = str(log_dir)
 
   @property
   def log_dir(self) -> str:

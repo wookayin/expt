@@ -1,3 +1,6 @@
+"""Tests for expt.data_loader."""
+# pylint: disable=protected-access
+
 import functools
 import os
 from pathlib import Path
@@ -37,7 +40,7 @@ def _setup_fixture():
       shutil.unpack_archive(tfile.name, FIXTURE_PATH, format='zip')
 
 
-class TestGetRunsLocal:
+class TestParseRun:
 
   @classmethod
   def setup_class(cls):
@@ -73,12 +76,12 @@ class TestGetRunsLocal:
     log_dir = Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2"
     p = data_loader._get_reader_for(log_dir)
     assert isinstance(p, data_loader.TensorboardLogReader)
-    assert p._log_dir == log_dir
+    assert p.log_dir == str(log_dir)
 
     log_dir = Path(FIXTURE_PATH) / "sample_csv"
     p = data_loader._get_reader_for(log_dir)
     assert isinstance(p, data_loader.CSVLogReader)
-    assert p._log_dir == log_dir
+    assert p.log_dir == str(log_dir)
 
   def test_parse_tensorboard_incremental_read(self):
     path = Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2"
