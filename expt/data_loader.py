@@ -336,7 +336,7 @@ class TensorboardLogReader(  # ...
 
 def _get_reader_for(log_dir,
                     *,
-                    candidates: Optional[Sequence[Type]] = None,
+                    candidates: Optional[Sequence[Type[LogReader]]] = None,
                     verbose=False) -> LogReader:
   if candidates is None:
     candidates = (
@@ -533,6 +533,8 @@ class RunLoader:
       run_postprocess_fn: Optional[Callable[[Run], Run]] = None,
       n_jobs: int = 8,
       pool_class=multiprocess.pool.Pool,
+      reader_cls: Union[None, Type[LogReader],  # ...
+                        Sequence[Type[LogReader]]] = None,
   ):
     self._readers = []
     self._reader_contexts = []
@@ -540,6 +542,10 @@ class RunLoader:
     self._verbose = verbose
     self._progress_bar = progress_bar
     self._run_postprocess_fn = run_postprocess_fn
+
+    if isinstance(reader_cls, Type):
+      reader_cls = [reader_cls]
+    self._reader_cls: Optional[Sequence[Type[LogReader]]] = reader_cls
 
     self.add_paths(*path_globs)
 
@@ -589,7 +595,7 @@ class RunLoader:
         self.add_log_dir(log_dir)
 
   def add_log_dir(self, log_dir: Union[Path, str]) -> LogReader:
-    reader = _get_reader_for(log_dir)
+    reader = _get_reader_for(log_dir, candidates=self._reader_cls)
     self.add_reader(reader)
     return reader
 

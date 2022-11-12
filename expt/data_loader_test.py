@@ -210,6 +210,22 @@ class TestRunLoader:
     print(runs)
     assert len(runs) == len(self.paths)
 
+  def test_run_loader_args(self):
+    path_csv = self.paths[4]
+
+    with pytest.raises(data_loader.CannotHandleException):
+      data_loader.RunLoader(path_csv, reader_cls=())
+
+    with pytest.raises(data_loader.CannotHandleException):
+      data_loader.RunLoader(
+          path_csv, reader_cls=data_loader.TensorboardLogReader)
+
+    # OK
+    data_loader.RunLoader(path_csv, reader_cls=(
+        data_loader.TensorboardLogReader,
+        data_loader.CSVLogReader,
+    ))  # yapf: disable
+
   def test_run_loader_serial(self):
     paths = [self.paths[0], self.paths[4]]
 
