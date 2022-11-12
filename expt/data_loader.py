@@ -69,6 +69,9 @@ class LogReader(abc.ABC, Generic[LogReaderContext]):
                       f" but given {type(log_dir)}")
     self._log_dir = str(log_dir)
 
+    if not path_util.isdir(log_dir):
+      raise FileNotFoundError(log_dir)
+
   @property
   def log_dir(self) -> str:
     return self._log_dir
@@ -334,15 +337,18 @@ class TensorboardLogReader(  # ...
     return df
 
 
+DEFAULT_READER_CANDIDATES = (
+    CSVLogReader,
+    TensorboardLogReader,
+)
+
+
 def _get_reader_for(log_dir,
                     *,
                     candidates: Optional[Sequence[Type[LogReader]]] = None,
                     verbose=False) -> LogReader:
   if candidates is None:
-    candidates = (
-        CSVLogReader,
-        TensorboardLogReader,
-    )
+    candidates = DEFAULT_READER_CANDIDATES
 
   for reader_cls in candidates:
     if not issubclass(reader_cls, LogReader):

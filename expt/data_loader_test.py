@@ -91,6 +91,12 @@ class TestParseRun:
     with pytest.raises(data_loader.CannotHandleException):
       data_loader.parse_run(tmp_path, verbose=True)
 
+  def test_logreaders_throw_when_path_not_exist(self):
+    # Any LogReaders should raise FileNotFoundError, not CannotHandleException
+    for cls in data_loader.DEFAULT_READER_CANDIDATES:
+      with pytest.raises(FileNotFoundError):
+        data_loader.parse_run(FIXTURE_PATH / "DOES-NOT-EXIST", reader_cls=cls)
+
   def test_parser_detection(self, path_csv, path_tensorboard, tmp_path):
     """Tests automatic parser resolution."""
 
@@ -175,8 +181,22 @@ class TestGetRunsRemote:
     assert len(df) >= 50
 
   def test_parse_filenotfound_ssh(self):
-    with pytest.raises(pd.errors.EmptyDataError):
+    with pytest.raises(FileNotFoundError):
       data_loader.parse_run(self.paths["not_found"], verbose=True)
+
+    # TODO: RunLoader ignores non-existent directories rather than raising
+    # FileNotFoundError. This behavior will be changed in the future.
+    # with pytest.raises(FileNotFoundError):
+    if True:  # pylint: disable=using-constant-test
+      data_loader.get_runs(self.paths["not_found"], verbose=True)
+
+  def test_get_runs_ssh(self):
+    # Can it handle or ignore non-existent paths?
+    runs = data_loader.get_runs(*self.paths.values(), n_jobs=1)
+    print(runs)
+    assert len(runs) == 2
+    assert runs[0].path.rstrip('/') == self.paths["sftp"].rstrip('/')
+    assert runs[1].path.rstrip('/') == self.paths["scp"].rstrip('/')
 
 
 class TestRunLoader:
