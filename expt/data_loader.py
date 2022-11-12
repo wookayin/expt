@@ -488,6 +488,31 @@ def get_runs_parallel(
 
 get_runs = get_runs_parallel
 
+
+async def get_runs_async(
+    *path_globs,
+    verbose=False,
+    n_jobs=8,
+    pool_class=multiprocess.pool.Pool,
+    progress_bar=True,
+    run_postprocess_fn=None,
+) -> RunList:
+  """An asynchronous version of get_runs."""
+
+  loader = RunLoader(
+      *path_globs,
+      verbose=verbose,
+      progress_bar=progress_bar,
+      run_postprocess_fn=run_postprocess_fn,
+      n_jobs=n_jobs,
+      pool_class=pool_class,
+  )
+  try:
+    return await loader.get_runs_async()
+  finally:
+    loader.close()
+
+
 #########################################################################
 # Run Loader Objects
 #########################################################################

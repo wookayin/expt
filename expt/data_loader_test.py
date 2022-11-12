@@ -208,6 +208,13 @@ class TestRunLoader:
     print(runs)
     assert len(runs) == len(self.paths)
 
+  @pytest.mark.asyncio
+  async def test_get_runs_async(self):
+    """Tests expt.get_run_async() with parallel."""
+    runs = await data_loader.get_runs_async(*self.paths)
+    print(runs)
+    assert len(runs) == len(self.paths)
+
   def test_run_loader_serial(self):
     paths = [self.paths[0], self.paths[4]]
 
