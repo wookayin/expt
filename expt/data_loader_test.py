@@ -110,7 +110,8 @@ class TestParseRun:
     """Tests automatic parser resolution."""
 
     p = data_loader._get_reader_for(path_tensorboard)
-    assert isinstance(p, data_loader.TensorboardLogReader)
+    assert isinstance(p, (data_loader.TensorboardLogReader,
+                          data_loader.RustTensorboardLogReader))
     assert p.log_dir == str(path_tensorboard)
 
     p = data_loader._get_reader_for(path_csv)
@@ -195,8 +196,15 @@ class TestGetRunsRemote:
   def setup_method(self, method):
     print("")
 
-  def test_parse_tensorboard_ssh(self):
-    df = data_loader.parse_run_tensorboard(self.paths["scp"], verbose=True)
+  @pytest.mark.parametrize("cls", [
+      data_loader.TensorboardLogReader,
+      data_loader.RustTensorboardLogReader,
+  ])
+  def test_parse_tensorboard_ssh(self, cls):
+    # Note that this directory contains multiple eventfiles
+    # (including an empty eventfile), so need to download all of them
+    # into the SAME directory in order for (Rust)TensorboardLogReader to work.
+    df = data_loader.parse_run(self.paths["scp"], verbose=True, reader_cls=cls)
     print(df)
     assert len(df) > 200
 

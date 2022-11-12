@@ -355,23 +355,51 @@ class RustTensorboardLogReader(LogReader[Dict]):
     import expt._internal  # noqa: F401  # type: ignore
 
     event_glob = os.path.join(log_dir, '*events.out.tfevents.*')
-    if not list(path_util.glob(event_glob)):  # no event file detected
+
+    # TODO: Cannot handle a case where new eventfile is created afterwards.
+    self._eventfiles = path_util.glob(event_glob)
+    if not self._eventfiles:  # no event file detected
       raise CannotHandleException(log_dir, self, "No event file detected")
+
+    self._is_remote = path_util.SFTPPathUtil.supports(self.log_dir)
 
   def new_context(self) -> Dict:
     return {}
 
   def read(self, context: Dict, verbose=False):
+    if self._is_remote:
+      return self._read_remote(context, verbose=verbose)
+    else:
+      return self._read_local(context, verbose=verbose)
+
+  def _read_remote(self, context: Dict, verbose=False):
     import expt._internal
-    del context  # unused
+    del context  # No context is used, always read in full.
 
-    # TODO: Create the reader object once, and reuse it.
-    # To make this possible, we should either make it serializable or
-    # improve the pickle-for-multiprocess structure of LogReaders.
-    # TODO: Serialization overhead is quite heavy; slower in multiprocess.
+    tmp_prefix = f"expt-{os.path.basename(self.log_dir)}-"
+    with tempfile.TemporaryDirectory(prefix=tmp_prefix) as tmpdir:
+      if verbose:
+        print(f"RustTensorboardLogReader: Downloading to {tmpdir}")
+      _download_local = path_util.SFTPPathUtil().download_local
+
+      for remote_file in self._eventfiles:
+        local_file = _download_local(remote_file, tmpdir=tmpdir)
+        assert os.path.exists(local_file)
+
+      # TODO: Create the reader object once, and reuse it.
+      # To make this possible, we should either make it serializable or
+      # improve the pickle-for-multiprocess structure of LogReaders.
+      # TODO: Serialization overhead is quite heavy; slower in multiprocess.
+      # pylint: disable-next=c-extension-no-member,protected-access
+      reader = expt._internal.TensorboardEventFileReader(tmpdir)
+      return reader.get_data()
+
+  def _read_local(self, context: Dict, verbose=False):
+    import expt._internal
+    del context  # No context is used, always read in full.
+
     # pylint: disable-next=c-extension-no-member,protected-access
-    reader = expt._internal.TensorboardEventFileReader(self._log_dir)
-
+    reader = expt._internal.TensorboardEventFileReader(self.log_dir)
     return reader.get_data()
 
   def result(self, context: Dict) -> pd.DataFrame:
