@@ -53,19 +53,22 @@ def test_local_file():
     assert 'episode_rewards' in line
 
 
-@pytest.mark.skipif('not os.getenv("EXPT_SSH_HOST")', \
-                    reason="Requires test SSH host set up manually")  # noqa
 @pytest.mark.parametrize("protocol", ["sftp", "scp"])
 def test_ssh(protocol: str):
   """Tests sftp:// files."""
-  sys.stdout.write("ssh\n")
 
-  host = os.environ["EXPT_SSH_HOST"]
-  uri_base = f"{protocol}://{host}:2222"
+  hostname = os.environ.get("EXPT_SSH_HOST")
+  if not hostname:
+    pytest.skip("Requires SSH host setup for test")
+
+  port = os.environ.get("EXPT_SSH_PORT", "22")
+  uri_base = f"{protocol}://{hostname}:{port}"
 
   bashrc = uri_base + "/.bashrc"
   directory = uri_base + "/.ssh"
   not_exist = uri_base + "/__NOT_EXIST__"
+
+  sys.stdout.write("ssh\n")
 
   assert P.exists(bashrc) is True
   assert P.exists(not_exist) is False

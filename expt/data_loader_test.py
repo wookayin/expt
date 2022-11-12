@@ -135,8 +135,6 @@ class TestParseRun:
     assert np.all(df == df_ref)
 
 
-@pytest.mark.skipif('not os.getenv("EXPT_SSH_HOST")', \
-                    reason="Requires test SSH host set up manually")  # noqa
 class TestGetRunsRemote:
   """Tests reading runs from a remote machine over SSH/SFTP.
 
@@ -149,16 +147,21 @@ class TestGetRunsRemote:
 
   @property
   def paths(self):
-    hostname = os.environ["EXPT_SSH_HOST"]
+    hostname = os.environ.get("EXPT_SSH_HOST")
+    if not hostname:
+      pytest.skip("Requires SSH host setup for test")
+
+    # Absolute and normalized path, which is assumed to be accessible over ssh.
+    p = FIXTURE_PATH.resolve()
+
     # see _setup_fixture()
     return {
-        "sftp": f"sftp://{hostname}/expt/fixtures/sample_csv/",
-        "scp": f"scp://{hostname}/expt/fixtures/lr_1E-03,conv=1,fc=2",
-        "not_found": f"scp://{hostname}/expt/fixtures/DOES-NOT-EXIST",
+        "sftp": f"sftp://{hostname}/{p}/sample_csv/",
+        "scp": f"scp://{hostname}/{p}/lr_1E-03,conv=1,fc=2",
+        "not_found": f"scp://{hostname}/{p}/DOES-NOT-EXIST",
     }
 
   def setup_method(self, method):
-    # TODO: Measure performance and run profiling.
     print("")
 
   def test_parse_tensorboard_ssh(self):
