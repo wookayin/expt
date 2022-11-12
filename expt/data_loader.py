@@ -97,6 +97,10 @@ class LogReader(abc.ABC, Generic[LogReaderContext]):
     del context
     raise NotImplementedError
 
+  def read_once(self) -> pd.DataFrame:
+    ctx = self.read(self.new_context())
+    return self.result(ctx)
+
   def __repr__(self):
     return f"<{type(self).__name__}, log_dir={self.log_dir}>"
 
@@ -739,6 +743,10 @@ __all__ = (
     'get_runs',
     'get_runs_serial',
     'get_runs_parallel',
-    'iter_runs_serial',
-    'parse_run',
+    'get_runs_async',
+    'LogReader',
+    'CannotHandleException',
+    'CSVLogReader',
+    'TensorboardLogReader',
+    'RunLoader',
 )

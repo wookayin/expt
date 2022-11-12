@@ -131,12 +131,7 @@ class TestParseRun:
         df.columns, ['accuracy/accuracy', 'global_step', 'xent/xent_1'])
 
     # The result should be identical as non-incremental read.
-    def _read(reader) -> pd.DataFrame:
-      ctx = reader.new_context()
-      ctx = reader.read(ctx)
-      return reader.result(ctx)
-
-    df_ref = _read(data_loader.TensorboardLogReader(path_tensorboard))
+    df_ref = data_loader.TensorboardLogReader(path_tensorboard).read_once()
     assert np.all(df == df_ref)
 
 
