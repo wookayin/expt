@@ -6,8 +6,13 @@ import concurrent.futures
 import contextlib
 import functools
 from typing import Callable, List
+import warnings
 
 from typeguard import typechecked
+
+
+def warn_deprecated(msg):
+  warnings.warn(msg, DeprecationWarning)
 
 
 class PropertyAccessor:

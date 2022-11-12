@@ -8,6 +8,7 @@ import shutil
 import sys
 import tempfile
 import urllib.request
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -18,7 +19,7 @@ from expt import data_loader
 from expt import util
 
 __PATH__ = os.path.abspath(os.path.dirname(__file__))
-FIXTURE_PATH = os.path.join(__PATH__, '../fixtures')
+FIXTURE_PATH = Path(os.path.join(__PATH__, '../fixtures'))
 
 # Suppress and silence TF warnings.
 # such as, cpu_utils.cc: Failed to get CPU frequency: 0 Hz
@@ -29,7 +30,7 @@ def _setup_fixture():
   """Set up example fixture data."""
   URL = "https://tensorboard.dev/static/log_set-2021-03-11.zip"
 
-  if (Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2").exists():
+  if (FIXTURE_PATH / "lr_1E-03,conv=1,fc=2").exists():
     return
 
   print(f"Downloading and extracting from {URL} ...")
@@ -40,21 +41,29 @@ def _setup_fixture():
       shutil.unpack_archive(tfile.name, FIXTURE_PATH, format='zip')
 
 
+@pytest.mark.filterwarnings('ignore:.*parse_run.*:DeprecationWarning')
 class TestParseRun:
 
   @classmethod
   def setup_class(cls):
     _setup_fixture()
 
-  def test_parse_tensorboard(self):
-    r = data_loader.parse_run(Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2")
+  @pytest.fixture
+  def path_tensorboard(self) -> Path:
+    return FIXTURE_PATH / "lr_1E-03,conv=1,fc=2"
 
+  @pytest.fixture
+  def path_csv(self) -> Path:
+    return FIXTURE_PATH / "sample_csv"
+
+  def test_parse_tensorboard(self, path_tensorboard):
+    r = data_loader.parse_run(path_tensorboard)
     assert len(r) >= 400
     np.testing.assert_array_equal(
         r.columns, ['accuracy/accuracy', 'global_step', 'xent/xent_1'])
 
-  def test_parse_progresscsv(self):
-    r = data_loader.parse_run(Path(FIXTURE_PATH) / "sample_csv")
+  def test_parse_progresscsv(self, path_csv):
+    r = data_loader.parse_run(path_csv)
 
     assert len(r) >= 50
     np.testing.assert_array_equal(r.columns, [
@@ -64,30 +73,41 @@ class TestParseRun:
         'episode_end_times',
     ])
 
-  def test_parse_cannot_handle(self):
-    # incompatible logdir format and parser
-    with pytest.raises(FileNotFoundError):
-      data_loader.CSVLogReader(Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2")
-    with pytest.raises(FileNotFoundError):
-      data_loader.TensorboardLogReader(Path(FIXTURE_PATH) / "sample_csv")
+  def test_parse_cannot_handle(self, path_csv, path_tensorboard, tmp_path):
+    """Tests incompatible logdir format and parser."""
 
-  def test_parser_detection(self):
+    with pytest.raises(data_loader.CannotHandleException):
+      data_loader.CSVLogReader(path_tensorboard)
 
-    log_dir = Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2"
-    p = data_loader._get_reader_for(log_dir)
+    with pytest.raises(data_loader.CannotHandleException):
+      data_loader.TensorboardLogReader(path_csv)
+
+    with pytest.raises(data_loader.CannotHandleException):
+      data_loader.parse_run_tensorboard(path_csv)
+
+    with pytest.raises(data_loader.CannotHandleException):
+      data_loader.parse_run_progresscsv(path_tensorboard)
+
+    with pytest.raises(data_loader.CannotHandleException):
+      data_loader.parse_run(tmp_path, verbose=True)
+
+  def test_parser_detection(self, path_csv, path_tensorboard, tmp_path):
+    """Tests automatic parser resolution."""
+
+    p = data_loader._get_reader_for(path_tensorboard)
     assert isinstance(p, data_loader.TensorboardLogReader)
-    assert p.log_dir == str(log_dir)
+    assert p.log_dir == str(path_tensorboard)
 
-    log_dir = Path(FIXTURE_PATH) / "sample_csv"
-    p = data_loader._get_reader_for(log_dir)
+    p = data_loader._get_reader_for(path_csv)
     assert isinstance(p, data_loader.CSVLogReader)
-    assert p.log_dir == str(log_dir)
+    assert p.log_dir == str(path_csv)
 
-  def test_parse_tensorboard_incremental_read(self):
-    path = Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2"
-    r = data_loader.TensorboardLogReader(path)
+    with pytest.raises(data_loader.CannotHandleException):
+      p = data_loader._get_reader_for(tmp_path)
 
-    print(path)
+  def test_parse_tensorboard_incremental_read(self, path_tensorboard):
+    r = data_loader.TensorboardLogReader(path_tensorboard)
+
     ctx = r.new_context()
     print("ctx[0]: last_read_rows =", ctx.last_read_rows)
     assert ctx.last_read_rows == 0
@@ -116,7 +136,7 @@ class TestParseRun:
       ctx = reader.read(ctx)
       return reader.result(ctx)
 
-    df_ref = _read(data_loader.TensorboardLogReader(path))
+    df_ref = _read(data_loader.TensorboardLogReader(path_tensorboard))
     assert np.all(df == df_ref)
 
 
@@ -165,11 +185,11 @@ class TestRunLoader:
   """Tests loading of multiple runs at once, in parallel."""
 
   paths = [
-      Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2",
-      Path(FIXTURE_PATH) / "lr_1E-03,conv=2,fc=2",
-      Path(FIXTURE_PATH) / "lr_1E-04,conv=1,fc=2",
-      Path(FIXTURE_PATH) / "lr_1E-04,conv=2,fc=2",
-      Path(FIXTURE_PATH) / "sample_csv",
+      FIXTURE_PATH / "lr_1E-03,conv=1,fc=2",
+      FIXTURE_PATH / "lr_1E-03,conv=2,fc=2",
+      FIXTURE_PATH / "lr_1E-04,conv=1,fc=2",
+      FIXTURE_PATH / "lr_1E-04,conv=2,fc=2",
+      FIXTURE_PATH / "sample_csv",
   ]
 
   @classmethod

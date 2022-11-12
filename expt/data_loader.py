@@ -14,7 +14,7 @@ import pathlib
 from pathlib import Path
 import sys
 from typing import (Any, Callable, Generic, Iterator, NamedTuple, Optional,
-                    Tuple, TYPE_CHECKING, TypeVar, Union)
+                    Sequence, Tuple, Type, TYPE_CHECKING, TypeVar, Union)
 
 import multiprocess.pool
 import numpy as np
@@ -56,6 +56,11 @@ class LogReader(abc.ABC, Generic[LogReaderContext]):
 
   Note that LogReaders must be forkable (i.e., serialize and deserialize)
   and its context object must be serializable so as to be sent to multiprocess.
+
+  Note that the constructor of LogReader implementations will throw
+  an exception of type `CannotHandleException`, if the given `log_dir`
+  cannot be handeled by the LogReader. E.g., when there is no tensorboard
+  eventfile for a TensorboardLogReader.
   """
 
   def __init__(self, log_dir):
@@ -96,37 +101,20 @@ class LogReader(abc.ABC, Generic[LogReaderContext]):
     return f"<{type(self).__name__}, log_dir={self.log_dir}>"
 
 
-def parse_run(log_dir, verbose=False) -> pd.DataFrame:
-  """Create a pd.DataFrame object from a single directory."""
-  if verbose:
-    # TODO Use python logging
-    print(f"Reading {log_dir} ...", file=sys.stderr, flush=True)
+class CannotHandleException(RuntimeError):
+  """Raised when LogReader cannot handle a given directory."""
 
-  # make it more general (rather than being specific to progress.csv)
-  # and support tensorboard eventlog files, etc.
-  sources = [
-      parse_run_progresscsv,
-      parse_run_tensorboard,
-  ]
-
-  for fn in sources:
-    try:
-      df = fn(log_dir, verbose=verbose)
-      if df is not None:
-        break
-    # TODO: Wanna throw IOError or shallow?
-    except (FileNotFoundError, IOError) as ex:
-      if verbose:
-        exc_msg = '{}: {}'.format(type(ex).__name__, ex)
-        print(f"{fn.__name__} -> {exc_msg}", file=sys.stderr, flush=True)
-  else:
-    raise pd.errors.EmptyDataError(  # type: ignore
-        f"Cannot handle dir: {log_dir}")
-
-  # add some optional metadata... (might not be preserved afterwards)
-  if df is not None:
-    df.path = log_dir
-  return df
+  def __init__(self,
+               log_dir,
+               reader: Optional[LogReader] = None,
+               reason: str = ""):
+    msg = f"log_dir `{log_dir}` cannot be handled"
+    if reader:
+      msg += f" by {type(reader).__name__}"
+    if reason:
+      msg += f" (reason: {reason})"
+    msg += "."
+    super().__init__(msg)
 
 
 class CSVLogReader(LogReader[pd.DataFrame]):
@@ -151,7 +139,8 @@ class CSVLogReader(LogReader[pd.DataFrame]):
         detected_csv = f
 
     if detected_csv is None:
-      raise FileNotFoundError(os.path.join(self.log_dir, "*.csv"))
+      raise CannotHandleException(log_dir, self,
+                                  "Does not contain progress.csv or log.csv")
 
     self._csv_path = detected_csv
 
@@ -165,7 +154,7 @@ class CSVLogReader(LogReader[pd.DataFrame]):
 
     # Read the detected file `p`
     if verbose:
-      print(f"parse_run (csv): Reading {self._csv_path}",
+      print(f"CSVLogReader: Reading {self._csv_path}",
             file=sys.stderr, flush=True)  # yapf: disable
 
     df: pd.DataFrame
@@ -229,7 +218,7 @@ class TensorboardLogReader(  # ...
     # TODO: When a new event file is added?
     self._event_files = list(sorted(path_util.glob(event_glob)))
     if not self._event_files:  # no event file detected
-      raise FileNotFoundError(f"No event file detected in {self.log_dir}")
+      raise CannotHandleException(log_dir, self, "No event file detected")
 
     # Ensure tensorboard is imported, so forked workers don't need to load again
     # pylint: disable-next=all
@@ -308,7 +297,7 @@ class TensorboardLogReader(  # ...
     chunk = defaultdict(dict)  # tag_name -> step -> value
     for event_file in self._event_files:
       if verbose:
-        print(f"parse_run (tfevents) : Reading {event_file} ...",
+        print(f"TensorboardLogReader: Reading {event_file} ...",
               file=sys.stderr, flush=True)  # yapf: disable
 
       def _callback(rows_read: int):
@@ -341,33 +330,81 @@ class TensorboardLogReader(  # ...
     return df
 
 
+def _get_reader_for(log_dir,
+                    *,
+                    candidates: Optional[Sequence[Type]] = None,
+                    verbose=False) -> LogReader:
+  if candidates is None:
+    candidates = (
+        CSVLogReader,
+        TensorboardLogReader,
+    )
+
+  for reader_cls in candidates:
+    if not issubclass(reader_cls, LogReader):
+      raise TypeError(f"`{reader_cls}` is not a subtype of LogReader.")
+
+    try:
+      reader: LogReader = reader_cls(log_dir)
+      return reader
+    except CannotHandleException as ex:
+      # When log_dir is not supported by the reader,
+      # an expected exception is thrown. Try the next one.
+      if verbose:
+        print(str(ex), file=sys.stderr)
+        sys.stderr.flush()
+
+  tried: str = ', '.join(t.__name__ for t in candidates)
+  raise CannotHandleException(log_dir, None,
+                              f"No available readers, tried: {tried}")
+
+
+#########################################################################
+# parse_run methods (deprecated)
+#########################################################################
+
+
+def parse_run(
+    log_dir,
+    *,
+    reader_cls: Optional[Type[LogReader]] = None,
+    verbose=False,
+) -> pd.DataFrame:
+  """(Deprecated) Create a pd.DataFrame object from a single directory."""
+
+  util.warn_deprecated(
+      "Use of parse_run is deprecated, and it is no longer used internally "
+      "except for testing. Instead, please use LogReader class directly.")
+
+  if verbose:
+    # TODO Use python logging
+    print(f"Reading {log_dir} ...", file=sys.stderr, flush=True)
+
+  reader = _get_reader_for(
+      log_dir,
+      candidates=[reader_cls] if reader_cls else None,
+      verbose=verbose,
+  )
+
+  ctx = reader.read(reader.new_context(), verbose=verbose)
+  df = reader.result(ctx)
+
+  # add some optional metadata... (might not be preserved afterwards)
+  if df is not None:
+    df.path = log_dir
+  return df
+
+
 def parse_run_progresscsv(log_dir, verbose=False) -> pd.DataFrame:
-  parser = CSVLogReader(log_dir)
-  ctx = parser.read(parser.new_context(), verbose=verbose)
-  return parser.result(ctx)
+  util.warn_deprecated("Use of parse_run_progresscsv is deprecated; "
+                       "use LogReader.")
+  return parse_run(log_dir, reader_cls=CSVLogReader, verbose=verbose)
 
 
 def parse_run_tensorboard(log_dir, verbose=False) -> pd.DataFrame:
-  parser = TensorboardLogReader(log_dir)
-  ctx = parser.read(parser.new_context(), verbose=verbose)
-  return parser.result(ctx)
-
-
-def _get_reader_for(log_dir):
-  for reader_cls in (
-      CSVLogReader,
-      TensorboardLogReader,
-  ):
-    try:
-      reader = reader_cls(log_dir)
-      return reader
-    except (FileNotFoundError, IOError):
-      # When log_dir is not supported by the reader,
-      # an expected exception is thrown. Try the next one.
-      pass
-
-  # TODO: Use some appropriate exception type.
-  raise FileNotFoundError(f"Cannot read {log_dir} using known log readers.")
+  util.warn_deprecated("Use of parse_run_tensorboard is deprecated; "
+                       "use CSVLogReader.")
+  return parse_run(log_dir, reader_cls=TensorboardLogReader, verbose=verbose)
 
 
 #########################################################################
