@@ -24,7 +24,7 @@ of hypotheses or algorithms applied over different environments or dataset).
 """
 
 import collections
-from dataclasses import dataclass  # for python 3.6, backport needed
+from dataclasses import dataclass
 import difflib
 import fnmatch
 from importlib import import_module as _import
@@ -45,11 +45,6 @@ from typeguard import typechecked
 from . import util
 
 T = TypeVar('T')
-
-# type checking issues with python < 3.7
-if not hasattr(re, 'Pattern') and not TYPE_CHECKING:
-  import typing
-  re.Pattern = typing.Pattern
 
 #########################################################################
 # Data Classes

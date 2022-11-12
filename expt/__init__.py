@@ -4,10 +4,10 @@
 
 import sys
 
-if sys.version_info < (3, 6):
-  raise RuntimeError("This library requires python 3.6+.")
+if sys.version_info < (3, 7):
+  raise RuntimeError("This library requires python 3.7+.")
 
-__version__ = '0.5.0.dev1'
+__version__ = '0.5.0.dev2'
 
 # auto-import submodules
 from . import colors as colors

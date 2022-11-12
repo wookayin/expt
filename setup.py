@@ -80,7 +80,6 @@ class DeployCommand(Command):
 install_requires = [
     'numpy>=1.16.5',
     'scipy',
-    'dataclasses>=0.6',
     'typeguard>=2.6.1',
     'matplotlib>=3.0.0',
     'pandas>=1.0',
@@ -91,7 +90,7 @@ install_requires = [
 
 tests_requires = [
     'mock>=2.0.0',
-    'pytest>=5.0',  # Python 3.5+
+    'pytest>=7.0',
     'pytest-cov',
     'pytest-asyncio',
     # Optional dependencies.
@@ -116,7 +115,6 @@ setup(
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
         'Operating System :: POSIX :: Linux',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
@@ -138,5 +136,5 @@ setup(
     },
     include_package_data=True,
     zip_safe=False,
-    python_requires='>=3.6',
+    python_requires='>=3.7',
 )
