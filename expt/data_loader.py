@@ -426,17 +426,13 @@ def iter_runs_serial(
 ) -> Iterator[Run]:
   """Enumerate Run objects from the given path(s)."""
 
-  for path_glob in path_globs:
-    if verbose:
-      print(f"get_runs: {str(path_glob)}", file=sys.stderr)
-
-    paths = list(sorted(path_util.glob(path_glob)))
-    for p in paths:
-      run = _handle_path(p, verbose=verbose,
-                         run_postprocess_fn=run_postprocess_fn,
-                         )  # yapf: disable
-      if run:
-        yield run
+  loader = RunLoader(
+      *path_globs,
+      verbose=verbose,
+      run_postprocess_fn=run_postprocess_fn,
+  )
+  # pylint: disable-next=protected-access
+  yield from loader._iter_runs_serial()
 
 
 def get_runs_serial(*path_globs,
@@ -457,20 +453,6 @@ def get_runs_serial(*path_globs,
             file=sys.stderr)  # yapf: disable
 
   return RunList(runs)
-
-
-def _handle_path(p, verbose, run_postprocess_fn=None) -> Optional[Run]:
-  try:
-    df = parse_run(p, verbose=verbose)
-    run = Run(path=p, df=df)
-    if run_postprocess_fn:
-      run = run_postprocess_fn(run)
-      _validate_run_postprocess(run)
-    return run
-  except (pd.errors.EmptyDataError, FileNotFoundError) as e:  # type: ignore
-    # Ignore empty data.
-    print(f"[!] {p} : {e}", file=sys.stderr, flush=True)
-    return None
 
 
 def get_runs_parallel(
@@ -623,7 +605,7 @@ class RunLoader:
 
     # Reload the data (incrementally or read from scratch) and return runs.
     if self._pool is None or not parallel:
-      return self._get_runs_serial(tqdm_bar=tqdm_bar)
+      return RunList(self._iter_runs_serial(tqdm_bar=tqdm_bar))
 
     else:
       pool = self._pool
@@ -674,7 +656,7 @@ class RunLoader:
 
     return RunList(result)
 
-  def _get_runs_serial(self, tqdm_bar: Optional[ProgressBar] = None) -> RunList:
+  def _iter_runs_serial(self, tqdm_bar: Optional[ProgressBar] = None):
     """Non-parallel version of get_runs().
 
     It might be useful for debugging, but also might be faster for smaller
@@ -682,8 +664,6 @@ class RunLoader:
     due to overhead in multiprocess, TF initialization, and serialization
     (which can often take up to 1~2 seconds).
     """
-    runs = []
-
     pbar = tqdm_bar
     if pbar is None:
       pbar = tqdm(total=len(self._readers)) \
@@ -698,11 +678,10 @@ class RunLoader:
 
       # TODO: better deal with failed runs.
       if run is not None:
-        runs.append(run)
+        yield run
       pbar.update(1)
 
     pbar.close()
-    return RunList(runs)
 
   # Asynchronous execution in a thread.
   _get_runs_async = util.wrap_async(get_runs)

@@ -197,7 +197,14 @@ class TestRunLoader:
     _setup_fixture()
 
   def test_get_runs_parallel(self):
+    """Tests expt.get_runs()"""
     runs = data_loader.get_runs_parallel(*self.paths, n_jobs=4)
+    print(runs)
+    assert len(runs) == len(self.paths)
+
+  def test_get_runs_serial(self):
+    """Tests expt.get_run_serial()"""
+    runs = data_loader.get_runs_serial(*self.paths)
     print(runs)
     assert len(runs) == len(self.paths)
 
