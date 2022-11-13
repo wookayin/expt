@@ -10,6 +10,7 @@ extra_standard_library = ['typing_extensions']
 [tool.pytest.ini_options]
 markers = [
   "slow: marks tests as slow (runnable with --run-slow)",
+  "benchmark: benchmark tests, report elapsed time",
   "serial",
 ]
 filterwarnings = [

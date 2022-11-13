@@ -44,9 +44,21 @@ jobs:
         run: |
           python -m pip install -U pip
 
+      - name: Set up Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          default: true
+          components: rustfmt
+
       - name: Display environment settings
         run: |
           python -c "import sys; print(sys.version)"
+          cargo --version
+
+      - name: Linting check
+        run: |
+          cargo fmt --all --check --verbose --message-format=human
 
       - name: Install expt and dependencies
         run: |

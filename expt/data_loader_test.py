@@ -7,6 +7,8 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
+import time
+from typing import NamedTuple, Type
 import urllib.request
 import warnings
 
@@ -329,6 +331,113 @@ class TestRunLoader:
     runs = await loader.get_runs_async(parallel=(parallel_mode == 'parallel'))
     assert len(runs) == len(self.paths)
     assert [r.path for r in runs] == [str(p) for p in self.paths]
+
+
+@pytest.mark.benchmark
+class TestLargeDataBenchmark:
+  """Benchmark and performance test for loading large, real-world run data.
+
+  Test data fixtures need to be downloaded or prepared in advance.
+  See ^/fixtures/README.md for how to set up benchmark fixtures and
+  the information about the dataset.
+
+  To run this test, try:
+
+  $ pytest --run-slow -s -k TestLargeDataBenchmark
+  """
+
+  class BenchmarkData:
+    """Local clone of gs://tensorboard-bench-logs/edge_cgan/."""
+
+    class Logdir(NamedTuple):
+      num_rows: int
+      path: str = '.'  # type: ignore
+
+    lifull_001 = Logdir(path="./tb", num_rows=119345)
+    lifull_002 = Logdir(path="./tb", num_rows=332740)
+    lifull_003 = Logdir(path="./tb", num_rows=389632)
+    lifull_004 = Logdir(path="./tb", num_rows=463309)
+    lifull_005 = Logdir(path="./tb", num_rows=386142)
+    egraph_edge_cgan_001 = Logdir(path=".", num_rows=3999766)
+    egraph_edge_cgan_002 = Logdir(path=".", num_rows=1601450)
+    egraph_edge_cgan_003 = Logdir(path=".", num_rows=2136493)
+
+    def __init__(self, path: Path):
+      for f, val in type(self).__dict__.items():
+        if isinstance(val, self.Logdir):
+          setattr(self, f, val._replace(path=str(path / f / val.path)))
+
+    def __getitem__(self, name) -> 'Logdir':
+      return getattr(self, name)
+
+  @pytest.fixture
+  def edge_cgan(self) -> 'BenchmarkData':
+    path = Path(FIXTURE_PATH) / 'edge_cgan'
+    if not path.exists():
+      pytest.skip("`fixture/edge_cgan` does not exist; "
+                  "Skipping performance test.")
+    return self.BenchmarkData(path=path)
+
+  @pytest.fixture
+  def profiling(self, request: pytest.FixtureRequest):
+    if request.node.get_closest_marker("slow"):
+      print("(a slow test)", end=' ', flush=True)
+    _start = time.time()
+    yield
+    _end = time.time()
+    print("\n[%s] Elapsed time: %.3f sec" % (request.node.name, _end - _start))
+
+  compare_tensorboard_and_rustboard = pytest.mark.parametrize("reader", [
+      pytest.param(data_loader.RustTensorboardLogReader, id="rustboard"),
+      pytest.param(data_loader.TensorboardLogReader, id="tensorboard",
+                   marks=pytest.mark.slow),
+  ])  # yapf: disable
+
+  # ---------------------------------------------------------------------------
+
+  @pytest.mark.parametrize("logdir", [
+      pytest.param('lifull_001'),
+      pytest.param('lifull_002'),
+      pytest.param('lifull_003', marks=pytest.mark.slow),
+      pytest.param('lifull_004', marks=pytest.mark.slow),
+      pytest.param('lifull_005', marks=pytest.mark.slow),
+      # 'egraph_edge_cgan_001',
+      # 'egraph_edge_cgan_002',
+      # 'egraph_edge_cgan_003',
+  ])  # yapf: disable
+  @compare_tensorboard_and_rustboard
+  def test_single_logdir(self, profiling, logdir,
+                         reader: Type[data_loader.LogReader],
+                         edge_cgan: BenchmarkData):
+    df = data_loader.parse_run(
+        edge_cgan[logdir].path,
+        reader_cls=reader,
+    )
+    assert len(df) == edge_cgan[logdir].num_rows
+    del profiling
+
+  @compare_tensorboard_and_rustboard
+  def test_parallel_lifull_all(self, profiling,
+                               reader: Type[data_loader.LogReader],
+                               edge_cgan: BenchmarkData):
+    logdirs = [
+        edge_cgan.lifull_001,
+        edge_cgan.lifull_002,
+        edge_cgan.lifull_003,
+        edge_cgan.lifull_004,
+        edge_cgan.lifull_005,
+    ]
+
+    print("")  # Avoid tqdm overwriting the line
+    runs: data.RunList = data_loader.RunLoader(
+        *[log.path for log in logdirs],
+        reader_cls=reader,
+        n_jobs=5,
+    ).get_runs()
+
+    for run, logdir in zip(runs, logdirs):
+      assert len(run.df) == logdir.num_rows
+    del profiling
 
 
 if __name__ == '__main__':
