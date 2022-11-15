@@ -948,7 +948,7 @@ class Experiment(Iterable[Hypothesis]):
       >>> df.style.background_gradient(cmap='viridis')
 
     """
-    columns = columns or (['index'] + list(self.columns))
+    columns = list(columns or (['index'] + list(self.columns)))
     aggregate = aggregate or self.AGGREGATE_MEAN_LAST(0.1)
 
     if name:
@@ -961,7 +961,7 @@ class Experiment(Iterable[Hypothesis]):
         for h in self.hypotheses
     ]
 
-    for column in columns:
+    def make_summary_series(column: str) -> pd.Series:
 
       def df_series(df: pd.DataFrame):
         # TODO: What if a named column is used as an index?
@@ -982,8 +982,17 @@ class Experiment(Iterable[Hypothesis]):
         v = aggregate_fn(series) if column != 'index' else series.max()
         return v
 
-      df[column] = [aggregate_h(df_series(hm)) for hm in hypo_means]
-    return df
+      return pd.Series(
+          name=column,
+          data=[aggregate_h(df_series(hm)) for hm in hypo_means],
+      )
+
+    df = pd.concat(
+        [df] +  # ... index and hypothesis
+        [make_summary_series(column) for column in columns],
+        axis=1)
+
+    return cast(pd.DataFrame, df)
 
   def interpolate(self,
                   x_column: Optional[str] = None,
