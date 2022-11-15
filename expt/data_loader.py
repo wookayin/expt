@@ -581,6 +581,7 @@ class RunLoader:
       self._pool.close()
       self._pool = None
 
+  @path_util.session_wrap
   def add_paths(self, *path_globs):
     for path_glob in path_globs:
 

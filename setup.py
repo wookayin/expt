@@ -84,6 +84,7 @@ install_requires = [
     'matplotlib>=3.0.0',
     'pandas>=1.0',
     'multiprocess>=0.70.12',
+    'multiprocessing_utils==0.4',
     'typing_extensions>=4.0',
     'python-slugify>=6.1.2',
 ]
