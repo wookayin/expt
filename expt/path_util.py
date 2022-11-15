@@ -4,6 +4,7 @@ import ast
 import contextlib
 from distutils.spawn import find_executable
 import fnmatch
+import functools
 from glob import glob as local_glob
 import io
 import os
@@ -11,15 +12,23 @@ import os.path
 from pathlib import Path
 from pathlib import PurePosixPath
 import shlex
+import socket
 import stat
 import subprocess
 import sys
 import tempfile
-from typing import Any, List, Sequence, TYPE_CHECKING, Union
+from typing import (Any, Callable, Dict, List, Sequence, Tuple, TYPE_CHECKING,
+                    Union)
 from typing_extensions import Protocol
 import urllib.parse
 
+import multiprocessing_utils
+
 PathType = Union[str, os.PathLike]
+
+if TYPE_CHECKING:
+  import fabric
+  import paramiko
 
 
 class PathUtilInterface(Protocol):
@@ -103,20 +112,88 @@ class SFTPPathUtil(PathUtilInterface):
 
   # TODO: Make verbosity control / logging (to see what's going on)
 
+  # **Thread-local and multiprocess-safe** storage for per-host SFTP session,
+  # when reusing SSH connection and SFTP session with keep_alive().
+  _local_storage = multiprocessing_utils.local()
+
+  @classmethod
   @contextlib.contextmanager
-  def _establish(self, path: PathType):
+  def session(cls):
+    S: Any = cls._local_storage
+
+    # Create a thread-local (process-local) cache for per-host SSH connections.
+    empty_cache: Dict[Tuple[str, str, int],  # (hostname, username, port)
+                      Tuple['paramiko.SFTPClient',  # (sftp, conn)
+                            'fabric.connection.Connection']] = {}
+
+    if getattr(S, 'sftp_cache', None) is None:
+      S.sftp_cache = empty_cache
+      S.count = 1
+    else:
+      # nested session, reuse the cache
+      S.count += 1
+
+    try:
+      yield
+    finally:
+      # Clean up the session: close all the cached resources and
+      # free up the thread-local storage.
+      S.count -= 1
+      if S.count == 0:
+        for _, (sftp, conn) in (S.sftp_cache or {}).items():
+          with contextlib.suppress(IOError):
+            sftp.close()
+          with contextlib.suppress(IOError):
+            conn.close()
+          del sftp, conn
+
+        S.sftp_cache = None
+
+  @classmethod
+  @contextlib.contextmanager
+  def _establish(cls, path: PathType):
     path = _to_path_string(path)
     uri = urllib.parse.urlparse(path)
 
-    import fabric
-    with fabric.connection.Connection(
-        host=uri.hostname,
-        user=uri.username,
-        port=uri.port or 22,
-    ) as conn:  # noqa
-      with conn.sftp() as sftp:
-        remote_path = uri.path[1:] if uri.path.startswith('/') else uri.path
-        yield sftp, uri, remote_path
+    import fabric.connection
+    conn: 'fabric.connection.Connection'
+    sftp: 'paramiko.SFTPClient'
+
+    # Reuse a keepalive connection if already established before.
+    sftp_cache = getattr(cls._local_storage, 'sftp_cache', None)
+    sftp_cache_key = (uri.hostname, uri.username, uri.port)
+    should_close = False
+
+    if sftp_cache is not None and sftp_cache_key in sftp_cache:
+      sftp, conn = sftp_cache[sftp_cache_key]
+    else:
+      # Make a new sftp connection if needed.
+      conn = fabric.connection.Connection(
+          host=uri.hostname,
+          user=uri.username,
+          port=uri.port or 22,
+      )
+      try:
+        sftp = conn.sftp()
+      except socket.gaierror as ex:
+        raise IOError(f"Cannot establish SSH connection to {uri.netloc}: "
+                      f"{str(ex)}") from ex
+
+      if sftp_cache is not None:
+        sftp_cache[sftp_cache_key] = (sftp, conn)
+      else:
+        should_close = True
+
+    try:
+      remote_path = uri.path[1:] if uri.path.startswith('/') else uri.path
+      yield sftp, uri, remote_path
+    finally:
+      if should_close:  # a new Connetion was created here, but not cached
+        with contextlib.suppress(IOError):
+          sftp.close()
+        with contextlib.suppress(IOError):
+          conn.close()
+        del sftp, conn
 
   def glob(self, pattern: PathType) -> Sequence[str]:
     if '**' in _to_path_string(pattern):
@@ -342,6 +419,23 @@ def _choose_backend(path: PathType) -> PathUtilInterface:
     if backend.supports(path):
       return backend
   raise ValueError(f"The path or URL `{path}` is not supported.")
+
+
+def session():
+  """Open a new session (as a context manager), within which expensive
+  remote connection resources (e.g., SSH) can be cached and reused."""
+  return SFTPPathUtil.session()
+
+
+def session_wrap(fn: Callable):
+  """Wrap a function call with a session() contextmanager."""
+
+  @functools.wraps(fn)
+  def _wrapped(*args, **kwargs):
+    with session():
+      return fn(*args, **kwargs)
+
+  return _wrapped
 
 
 def glob(pattern: PathType) -> Sequence[str]:

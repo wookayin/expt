@@ -90,12 +90,65 @@ def test_ssh(protocol: str):
   glob = V(P.glob(uri_base + "/.ss*/*s*"))
 
 
+def test_ssh_session(monkeypatch):
+  """By reusing a ssh connection, remote file operations should be faster
+  by re-using the connection resource kept alive."""
+  import fabric.connection
+
+  hostname = os.environ.get("EXPT_SSH_HOST")
+  port = os.environ.get("EXPT_SSH_PORT", "22")
+  if not hostname:
+    pytest.skip("Requires SSH host setup for test")
+
+  # Keep track of how many times SSH connection was established.
+  n_called = 0
+
+  # yapf: disable
+  _original_open = fabric.connection.Connection.open
+  def _spy_open(self, *args, **kwargs):  # noqa
+    _original_open(self, *args, **kwargs)
+    nonlocal n_called; n_called += 1  # noqa
+  monkeypatch.setattr(fabric.connection.Connection, 'open', _spy_open)
+  # yapf: enable
+
+  with P.session():
+    _cache = P.SFTPPathUtil._local_storage.sftp_cache  # pylint: disable=all
+    assert len(_cache) == 0, "empty yet"
+
+    test_ssh(protocol='sftp')
+
+    sftp, conn = list(_cache.values())[0]
+    assert not sftp.sock.closed
+
+  assert sftp.sock.closed
+  assert n_called == 1
+
+  # Nested session: should yield the same session
+  n_called = 0
+  with P.session():
+    P.exists(f"sftp://{hostname}:{port}/new-session")
+    with P.session():
+      P.exists(f"sftp://{hostname}:{port}/nested-session")
+    P.exists(f"scp://{hostname}:{port}/session-should-be-alive")
+
+  assert n_called == 1
+
+  P.exists(f"sftp://{hostname}:{port}/outside-session")
+  assert n_called == 2
+
+
 @pytest.mark.slow
 def test_gcloud():
   """Tests gs:// files.
 
   URL: https://console.cloud.google.com/storage/browser/tfds-data
   """
+  try:
+    # pylint: disable-next=all
+    import tensorflow.io.gfile as gfile  # type: ignore  # noqa
+  except ImportError:
+    pytest.skip("tensorflow is not available, skipping gcloud tests")
+
   sys.stdout.write("gcloud\n")
   TFDATA_JSONL: str = "gs://tfds-data/community-datasets-list.jsonl"
 
