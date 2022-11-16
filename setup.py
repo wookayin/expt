@@ -86,7 +86,6 @@ install_requires = [
     'multiprocess>=0.70.12',
     'multiprocessing_utils==0.4',
     'typing_extensions>=4.0',
-    'python-slugify>=6.1.2',
 ]
 
 tests_requires = [

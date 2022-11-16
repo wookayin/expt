@@ -16,7 +16,6 @@ import socket
 import stat
 import subprocess
 import sys
-import tempfile
 from typing import (Any, Callable, Dict, List, Sequence, Tuple, TYPE_CHECKING,
                     Union)
 from typing_extensions import Protocol
@@ -253,19 +252,27 @@ class SFTPPathUtil(PathUtilInterface):
     with self._establish(path) as (sftp, _, remote_path):
       yield sftp.open(remote_path)
 
-  def download_local(self, path: PathType) -> 'TempFile':
-    """Fetches and download the remote file into a temporary file locally."""
-    from slugify import slugify
-    slug = slugify(_to_path_string(path)) + "-"
-    if len(slug) > 235:
-      slug = slug[-235:]
-    f = tempfile.NamedTemporaryFile(prefix=slug)
+  def download_local(self, path: PathType, tmpdir: str) -> str:
+    """Fetches and download the remote file into a local temporary directory.
+
+    Note that the temp directory to download into is an unique directory,
+    so it does not get messed up with other eventfiles from other log_dirs.
+    Callers should be responsible to ensure this and remove the directory
+    after the use of file is complete.
+
+    Returns the local path on the tmpdir as str.
+    """
+    if not os.path.isdir(tmpdir):
+      raise FileNotFoundError(f"Not a directory: `{tmpdir}")
+
+    basename = os.path.basename(path)
+    local_path = os.path.join(tmpdir, basename)
 
     with self._establish(path) as (sftp, _, remote_path):
       # TODO: This is blocking, very slow. Can we make it async?
-      sftp.get(remote_path, f.name, prefetch=True)
+      sftp.get(remote_path, local_path, prefetch=True)
 
-    return f
+    return local_path
 
 
 # yapf: disable

@@ -13,6 +13,7 @@ import os
 import pathlib
 from pathlib import Path
 import sys
+import tempfile
 from typing import (Any, Callable, Generic, Iterator, NamedTuple, Optional,
                     Sequence, Tuple, Type, TYPE_CHECKING, TypeVar, Union)
 
@@ -199,17 +200,18 @@ if tensorboard or TYPE_CHECKING:
       if path_util.SFTPPathUtil.supports(path):
         # TODO: Verbose logging of file path, etc.
         # TODO: This is blocking in a thread. Add an asynchronous version.
-        local_file = path_util.SFTPPathUtil().download_local(path)
-        self._local_file = local_file
-        super().__init__(local_file.name)
+        self._tmpdir = tempfile.TemporaryDirectory(prefix="expt")
+        self._local_file = path_util.SFTPPathUtil().download_local(
+            path, self._tmpdir.name)
+        super().__init__(self._local_file)
       else:
+        self._tmpdir = None
         super().__init__(path)
 
     def close(self):
-      try:
-        self._local_file.close()
-      except IOError:
-        pass
+      with contextlib.suppress(IOError):
+        if self._tmpdir:
+          self._tmpdir.cleanup()
 
 
 class TensorboardLogReader(  # ...
