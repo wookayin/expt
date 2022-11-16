@@ -1,5 +1,14 @@
 name: "Run Tests"
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches:
+      - 'main'
+      - 'master'
+      - 'ci/*'
+    tags:
+      - '*'
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   run-tests:
