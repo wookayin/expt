@@ -52,18 +52,19 @@ def matplotlib_rcparams(kwargs: dict):
 def hypothesis() -> Hypothesis:
   """Make a sample Hypothesis."""
 
-  def _make_data(max_accuracy=1.0):
+  def _make_data(max_accuracy=1.0, *, seed):
     data = dict()
+
     data['step'] = np.arange(10, 10000 + 10, 10)
     data['loss'] = np.exp((-data['step'] + 700) / 1000.0)
-    data['loss'] += np.random.normal(0, 0.1, size=1000)
+    data['loss'] += np.random.RandomState(seed).normal(0, 0.1, size=1000)  # pylint: disable=no-member  # noqa
     data['accuracy'] = (data['step'] / data['step'].max()) * max_accuracy
     data['lr'] = np.ones(1000) * 0.001
     return data
 
   runs = [
-      Run("seed0", pd.DataFrame(_make_data(max_accuracy=0.9))),
-      Run("seed1", pd.DataFrame(_make_data(max_accuracy=1.0))),
+      Run("seed0", pd.DataFrame(_make_data(max_accuracy=0.9, seed=42))),
+      Run("seed1", pd.DataFrame(_make_data(max_accuracy=1.0, seed=43))),
   ]
   h = Hypothesis(name="hypo_plot", runs=runs)
   return h
