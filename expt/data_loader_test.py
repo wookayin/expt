@@ -2,6 +2,7 @@
 # pylint: disable=protected-access
 
 import functools
+import importlib.util
 import os
 from pathlib import Path
 import shutil
@@ -152,6 +153,9 @@ class TestParseRun:
     df_ref = data_loader.TensorboardLogReader(path_tensorboard).read_once()
     assert np.all(df == df_ref)
 
+  @pytest.mark.skipif(
+      importlib.util.find_spec("expt._internal") is None,
+      reason="The rust extension is not available")
   def test_parse_tensorboard_fast_with_rust(self):
     parser = data_loader.RustTensorboardLogReader(
         Path(FIXTURE_PATH) / "lr_1E-03,conv=1,fc=2")

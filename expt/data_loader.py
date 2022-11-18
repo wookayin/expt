@@ -352,7 +352,11 @@ class RustTensorboardLogReader(LogReader[Dict]):
 
     # Import early, so that multiprocess workers do not need to import again
     # pylint: disable-next=unused-import
-    import expt._internal  # noqa: F401  # type: ignore
+    try:
+      import expt._internal  # noqa: F401  # type: ignore
+    except ImportError as ex:
+      raise CannotHandleException(
+          log_dir, self, "expt's rust extension is not installed.") from ex
 
     event_glob = os.path.join(log_dir, '*events.out.tfevents.*')
 
@@ -413,6 +417,7 @@ class RustTensorboardLogReader(LogReader[Dict]):
 DEFAULT_READER_CANDIDATES = (
     CSVLogReader,
     RustTensorboardLogReader,
+    TensorboardLogReader,
 )
 
 
