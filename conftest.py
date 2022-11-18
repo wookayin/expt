@@ -19,3 +19,11 @@ def pytest_collection_modifyitems(config, items: List[pytest.Item]):
     for item in items:
       if item.get_closest_marker("slow"):
         item.add_marker(skip)
+
+
+def pytest_report_teststatus(report: pytest.TestReport, config: pytest.Config):
+  # Report duration time for @pytest.mark.benchmark tests.
+  if report.when == 'call' and report.keywords.get('benchmark'):
+    if report.outcome == 'passed':
+      summary = "PASSED ({:.2f} sec)".format(report.duration)
+      return report.outcome, 'B', (summary)

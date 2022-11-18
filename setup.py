@@ -1,13 +1,46 @@
 """setup.py for expt"""
 
+import ast
+from distutils.errors import DistutilsPlatformError
 import os
 import re
+import shutil
 import sys
+import textwrap
 
 from setuptools import Command
 from setuptools import setup
 
+try:
+  from setuptools_rust import Binding
+  from setuptools_rust import RustExtension
+  from setuptools_rust import build_rust
+  from setuptools_rust.command import get_rust_version
+except ImportError:
+  sys.stderr.write(textwrap.dedent(
+      """\
+          Error: setuptools_rust cannot be imported.
+          Runnig setup.py like `python setup.py` is deprecated.
+
+          Please run `pip install .` or `pip install -e .[test]` instead.
+      """))  # yapf: disable  # noqa
+  sys.exit(1)
+
 __PATH__ = os.path.abspath(os.path.dirname(__file__))
+
+EXPT_DISABLE_RUST = ast.literal_eval(os.getenv("EXPT_DISABLE_RUST") or "False")
+
+
+class build_rust_for_expt(build_rust):
+
+  def run(self):
+    if not EXPT_DISABLE_RUST and get_rust_version() is None:
+      raise DistutilsPlatformError(
+          "Rust toolchain (cargo, rustc) not found. "
+          "Please install rust toolchain to build expt with the rust extension. "
+          "If you would like to build expt without the extension, "
+          "export EXPT_DISABLE_RUST=1 and try again.")
+    return super().run()
 
 
 def read_readme():
@@ -89,6 +122,7 @@ install_requires = [
 ]
 
 tests_requires = [
+    'setuptools-rust',
     'mock>=2.0.0',
     'pytest>=7.0',
     'pytest-cov',
@@ -124,16 +158,22 @@ setup(
         'Topic :: Scientific/Engineering',
     ],
     packages=['expt'],
+    rust_extensions=[
+        RustExtension("expt._internal", binding=Binding.PyO3, \
+                      debug=False  # Always use --release (optimized) build
+                      ),
+    ] if not EXPT_DISABLE_RUST else [],
     install_requires=install_requires,
     extras_require={'test': tests_requires},
-    setup_requires=['pytest-runner'],
+    setup_requires=['setuptools-rust'],
     tests_require=tests_requires,
     entry_points={
         #'console_scripts': ['expt=expt:main'],
     },
     cmdclass={
         'deploy': DeployCommand,
-    },
+        'build_rust': build_rust_for_expt,
+    },  # type: ignore
     include_package_data=True,
     zip_safe=False,
     python_requires='>=3.7',
