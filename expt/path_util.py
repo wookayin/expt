@@ -10,6 +10,7 @@ import io
 import os
 import os.path
 from pathlib import Path
+from pathlib import PurePath
 from pathlib import PurePosixPath
 import shlex
 import socket
@@ -51,7 +52,7 @@ class PathUtilInterface(Protocol):
 
 
 def _to_path_string(path: PathType) -> str:
-  if isinstance(path, Path):
+  if isinstance(path, (PurePath, Path)):
     return str(path)
   elif isinstance(path, str):
     return path

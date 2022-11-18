@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+from pathlib import PurePath
 import sys
 
 import pytest
@@ -43,6 +44,7 @@ def test_local_file():
   assert str(FIXTURE_PATH / PROGRESS_CSV) in glob
 
   assert P.exists(FIXTURE_PATH / PROGRESS_CSV)
+  assert P.exists(PurePath(FIXTURE_PATH) / PROGRESS_CSV)
 
   assert P.isdir(FIXTURE_PATH / "sample_csv")
   assert P.isdir(FIXTURE_PATH / "sample_csv/")
