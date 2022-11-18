@@ -124,6 +124,15 @@ class TestHypothesisPlot:
 
   # TODO: This test suite is incomplete. Add more tests.
 
+  def test_plot_arg_y(self, hypothesis: Hypothesis):
+    hypothesis.plot(y="loss")
+    hypothesis.plot(y=("loss", "accuracy"))
+    hypothesis.plot(y=["loss", "accuracy"])
+    hypothesis.plot(y=pd.Series(["loss", "accuracy"]))
+    hypothesis.plot(y=np.asarray(["loss", "accuracy"], dtype=object))
+    with pytest.raises(TypeError):
+      hypothesis.plot(y=np.asarray([["loss", "accuracy"]], dtype=object))
+
   def test_grid_spec(self, hypothesis: Hypothesis):
     # single y
     g = hypothesis.plot(y="loss")

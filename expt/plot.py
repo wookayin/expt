@@ -447,11 +447,14 @@ class HypothesisPlotter:
 
     # determine which columns to draw (i.e. y) before smoothing.
     # should only include numerical values
-    y: Iterable[str] = kwargs.get('y', None) or representative.columns
+    y: Iterable[str] = kwargs.get('y', representative.columns)
     if isinstance(y, str):
       y = [y]
     if 'x' in kwargs:
       y = [yi for yi in y if yi != kwargs['x']]
+
+    if any(not isinstance(yi, str) for yi in y):
+      raise TypeError("`y` contains one or more non-str argument(s).")
 
     if ignore_unknown:
       # TODO(remove): this is hack to handle homogeneous column names
@@ -965,7 +968,7 @@ class ExperimentPlotter:
 
       else:
         # display multiple columns over subplots:
-        if y:
+        if y is not None:
           kwargs['label'] = [f'{y_i} ({name})' for y_i in y]
           if kwargs.get('prettify_labels', False):
             kwargs['label'] = util.prettify_labels(kwargs['label'])
