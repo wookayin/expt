@@ -10,9 +10,13 @@ import warnings
 
 from typeguard import typechecked
 
+# Make DeprecationWarning within expt printed, but only once
+warnings.filterwarnings(
+    "once", "", category=DeprecationWarning, module=r"^expt\.")
+
 
 def warn_deprecated(msg):
-  warnings.warn(msg, DeprecationWarning)
+  warnings.warn(msg, DeprecationWarning, stacklevel=2)
 
 
 class PropertyAccessor:
