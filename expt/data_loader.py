@@ -697,12 +697,13 @@ class RunLoader:
   ) -> Tuple[Optional[Run], LogReaderContext]:
     """The job function to be executed in a "forked" worker process."""
     try:
-      context = reader.read(context)
-      df = reader.result(context)
-      run = Run(path=reader.log_dir, df=df)
-      if run_postprocess_fn:
-        run = run_postprocess_fn(run)
-        _validate_run_postprocess(run)
+      with path_util.session():
+        context = reader.read(context)
+        df = reader.result(context)
+        run = Run(path=reader.log_dir, df=df)
+        if run_postprocess_fn:
+          run = run_postprocess_fn(run)
+          _validate_run_postprocess(run)
       return run, context
     except (pd.errors.EmptyDataError, FileNotFoundError) as e:  # type: ignore
       # Ignore empty data.
