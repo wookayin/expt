@@ -41,7 +41,8 @@ def runs_gridsearch() -> RunList:
   for (algo, env_id) in itertools.product(ALGO, ENV_ID):
     for seed in [0, 1]:
       df = pd.DataFrame({"reward": np.arange(100)})
-      runs.append(Run(f"{algo}-{env_id}-seed{seed}", df))
+      run = Run(f"{algo}-{env_id}-seed{seed}", df)
+      runs.append(run)
   return RunList(runs)
 
 
@@ -179,6 +180,24 @@ class TestRunList(_TestBase):
     assert list(df['algo'].unique()) == ["ppo", "sac"]
     assert list(df['env_id'].unique()) == ["halfcheetah", "hopper", "humanoid"]  # yapf: disable
     assert list(df['seed'].unique()) == ['0', '1']
+
+  def test_varied_config_keys(self, runs_gridsearch: RunList):
+    runs = runs_gridsearch
+
+    def config_fn(r: Run):
+      config = {}
+      config['algo'], config['env_id'], config['seed'] = r.name.split('-')
+      config['common_opts'] = 'shared'
+      config['r_id'] = id(r)
+      return config
+
+    varied_config_keys = runs.varied_config_keys(
+        config_fn=config_fn, excludelist=['seed'])
+
+    print(f"{varied_config_keys=}")
+    assert 'foo' not in varied_config_keys
+    assert 'seed' not in varied_config_keys  # excludelist
+    assert varied_config_keys == ('algo', 'env_id', 'r_id')
 
   def test_to_dataframe_multiindex(self, runs_gridsearch: RunList):
     runs = runs_gridsearch

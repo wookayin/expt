@@ -181,6 +181,23 @@ class RunList(Sequence[Run]):
 
   INDEX_EXCLUDE_DEFAULT = ('seed', 'random_seed', 'log_dir', 'train_dir')
 
+  def varied_config_keys(
+      self,
+      config_fn: Callable[[Run], RunConfig] = _default_config_fn,
+      excludelist: Sequence[str] = INDEX_EXCLUDE_DEFAULT,
+  ) -> Sequence[str]:
+    """Get a list of config keys (or indices in to_dataframe) that have more
+    than two different unique values. If all the configs are identical, the
+    list will contain all the unique config keys existing in any of the runs.
+
+    Args:
+      config_fn: Config for Runs. By default, Run.config will be used.
+      excludelist: Lists which keys will be excluded from the result.
+    """
+    return tuple(
+        k for k in varied_config_keys(self, config_fn=config_fn)
+        if k not in excludelist)
+
   def to_dataframe(
       self,
       include_config: bool = True,
