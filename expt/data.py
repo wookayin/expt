@@ -117,7 +117,7 @@ class Run:
 def _default_config_fn(run: Run) -> RunConfig:
   if run.config is not None:
     return run.config
-  return {}
+  raise ValueError(f"A Run with name `{run.name}` does not have config.")
 
 
 class RunList(Sequence[Run]):
@@ -395,6 +395,8 @@ class RunList(Sequence[Run]):
   def extract(self, pat: str, flags: int = 0) -> pd.DataFrame:
     r"""Extract capture groups in the regex pattern `pat` as columns.
 
+    DEPRECATED. Use to_dataframe() explicitly.
+
     Example:
       >>> runs[0].name
       "ppo-halfcheetah-seed0"
@@ -403,7 +405,7 @@ class RunList(Sequence[Run]):
       >>> assert list(df.columns) == ['algo', 'env_id', 'seed', 'run']
 
     """
-    df: pd.DataFrame = self.to_dataframe()
+    df: pd.DataFrame = self.to_dataframe(config_fn=lambda r: r.config or {})
     df = df['name'].str.extract(pat, flags=flags)
     df['run'] = list(self._runs)
     return df

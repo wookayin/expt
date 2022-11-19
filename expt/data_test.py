@@ -183,8 +183,14 @@ class TestRunList(_TestBase):
   def test_to_dataframe_multiindex(self, runs_gridsearch: RunList):
     runs = runs_gridsearch
 
-    # when there is no config.
-    df = runs.to_dataframe()
+    # when there is no run.config: error
+    with pytest.raises(ValueError, match="does not have config"):
+      df = runs.to_dataframe()  # include_config=True
+
+    # when there is no run.config but no include_config: OK, Use 0..N index
+    df = runs.to_dataframe(include_config=False)
+    print(df)
+    assert list(df.index) == list(range(len(runs)))
     assert list(df.columns) == ['name', 'run']
 
     # with custom config_fn
@@ -356,7 +362,7 @@ class TestExperiment(_TestBase):
 
   def test_create_from_dataframe(self, runs_gridsearch: RunList):
     """Tests Experiment.from_dataframe with the minimal defaults."""
-    df = runs_gridsearch.to_dataframe()
+    df = runs_gridsearch.to_dataframe(include_config=False)
     ex = Experiment.from_dataframe(df)
     # Each run becomes an individual hypothesis.
     assert len(ex.hypotheses) == 12
