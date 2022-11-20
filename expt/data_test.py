@@ -48,6 +48,17 @@ def runs_gridsearch() -> RunList:
 
 class TestRun(_TestBase):
 
+  def test_creation(self):
+    df = pd.DataFrame({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})
+    r = Run("foo/bar", df=df)
+
+    r2 = r.with_config(config=dict(conf_foo='bar'))
+    assert r is not r2  # This is not in-place substitution.
+
+    assert r2.name == r.name
+    assert r2.path == r.path
+    assert r2.config == dict(conf_foo='bar')
+
   def test_run_properties(self):
     df = pd.DataFrame({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})
 

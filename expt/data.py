@@ -24,6 +24,7 @@ of hypotheses or algorithms applied over different environments or dataset).
 """
 
 import collections
+import dataclasses
 from dataclasses import dataclass
 import difflib
 import fnmatch
@@ -42,7 +43,7 @@ from pandas.core.groupby.generic import DataFrameGroupBy
 from scipy import interpolate
 from typeguard import typechecked
 
-from . import util
+from expt import util
 
 T = TypeVar('T')
 
@@ -93,6 +94,14 @@ class Run:
     """Returns the last segment of the path."""
     path = self.path.rstrip('/')
     return os.path.basename(path)
+
+  def with_config(self, config: RunConfig) -> 'Run':
+    """Create a new Run instance with the given `config`."""
+    if not isinstance(config, Mapping) and callable(config):
+      config = config(self)
+    if not isinstance(config, Mapping):
+      raise TypeError(f"`config` must be a Mapping, but given {type(config)}")
+    return dataclasses.replace(self, config=config)
 
   def to_hypothesis(self) -> 'Hypothesis':
     """Create a new `Hypothesis` consisting of only this run."""
