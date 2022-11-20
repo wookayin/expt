@@ -3,11 +3,13 @@
 import itertools
 import re
 import sys
+from typing import cast
 
 import numpy as np
 import pandas as pd
 import pytest
 
+import expt.data
 from expt.data import Experiment
 from expt.data import Hypothesis
 from expt.data import Run
@@ -85,7 +87,15 @@ class TestRun(_TestBase):
 class TestRunList(_TestBase):
 
   def _fixture(self) -> RunList:
-    return RunList(Run("r%d" % i, pd.DataFrame({"x": [i]})) for i in range(16))
+    return RunList(
+        Run(
+            "r%d" % i,
+            pd.DataFrame({"x": [i]}),
+            config={
+                "type": "runlist_fixture",
+                "i": i
+            },
+        ) for i in range(16))
 
   def test_basic_operations(self):
     # instantiation
@@ -171,6 +181,8 @@ class TestRunList(_TestBase):
     for i in range(16):
       assert h.runs[i] is runs[i]
 
+    assert h.config == {"type": "runlist_fixture"}
+
   def test_groupby(self):
     runs = self._fixture()
     groups = dict(runs.groupby(lambda run: int(run.name[1:]) % 5))
@@ -240,6 +252,8 @@ class TestRunList(_TestBase):
     assert list(df.columns) == ['hypothesis']  # no 'name'
     assert df.hypothesis[0].name == 'algorithm=ppo; env=halfcheetah'
     assert isinstance(df.hypothesis[0], Hypothesis)
+    # Hypothesis.config exists?
+    assert df.hypothesis[0].config == dict(algorithm='ppo', env='halfcheetah')
 
     # additional option: include_summary
     df = runs.to_dataframe(
@@ -323,6 +337,30 @@ class TestHypothesis(_TestBase):
     # test gropued, columns, mean, std, min, max, etc.
     pass
 
+  def test_config(self):
+    """Tests Hypothesis.config."""
+
+    # Automatic mode
+    r0 = Run("r0", pd.DataFrame(), config={"a": 1, "b": 2, "c": [3], "r0": 0})
+    r1 = Run("r1", pd.DataFrame(), config={"a": 1, "b": 4, "c": [3], "r1": 1})
+    h = Hypothesis.of(name="hello", runs=[r0, r1])
+    assert h.config == {"a": 1, "c": [3]}  # see Hypothesis.extract_config
+    assert cast(expt.data.RunConfig, r0.config)['r0'] == 0
+
+    h = Hypothesis.of([r0])
+    assert h.config == r0.config
+    assert not (h.config is r0.config)
+
+    h = Hypothesis.of([])
+    assert h.config is None
+
+    # Manual mode
+    h = Hypothesis.of(name="hello", runs=[r0, r1], config=None)
+    assert h.config is None
+
+    h = Hypothesis.of(name="hello", runs=[r0, r1], config={"foo": "bar"})
+    assert h.config == {"foo": "bar"}
+
   def test_summary(self):
     r0 = Run("r0", pd.DataFrame({"x": np.arange(100), "y": np.arange(100)}))
     r1 = Run("r1", pd.DataFrame({"x": np.zeros(100), "y": np.arange(100)}))
@@ -341,6 +379,7 @@ class TestHypothesis(_TestBase):
   def test_interpolate(self):
     """Tests interpolate and subsampling when runs have different support."""
     h: Hypothesis = self._fixture()
+    h.config = {"kind": "interpolate"}
 
     # (1) Test a normal case.
     h_interpolated = h.interpolate("x", n_samples=91)
@@ -368,12 +407,16 @@ class TestHypothesis(_TestBase):
         np.array(dfs_interp[1].loc[dfs_interp[1].index >= 1, 'y']),
         np.array(dfs_interp[1].index[dfs_interp[1].index >= 1]) * 2 + 1)
 
+    # it should preserve other metadata (e.g., config)
+    assert h_interpolated.config == h.config
+
     # (2) Invalid use
     with pytest.raises(ValueError, match="Unknown column"):
       h_interpolated = h.interpolate("unknown_index", n_samples=1000)
 
   def test_apply(self):
     h: Hypothesis = self._fixture()
+    h.config = {"kind": "apply"}
 
     def _transform(df: pd.DataFrame) -> pd.DataFrame:
       df = df.copy()
@@ -386,6 +429,9 @@ class TestHypothesis(_TestBase):
     print(h2[0].df)
     np.testing.assert_array_equal(h[0].df['y'], [0, 4, 8, 12, 16])
     np.testing.assert_array_equal(h2[0].df['y'], [0, 1, 2, 3, 4])
+
+    # it should preserve other metadata (e.g., config)
+    assert h2.config == h.config
 
 
 class TestExperiment(_TestBase):

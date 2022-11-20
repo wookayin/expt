@@ -24,6 +24,7 @@ of hypotheses or algorithms applied over different environments or dataset).
 """
 
 import collections
+import copy
 import dataclasses
 from dataclasses import dataclass
 import difflib
@@ -34,8 +35,8 @@ import os.path
 import re
 import types
 from typing import (Any, Callable, cast, Dict, Iterable, Iterator, List,
-                    Mapping, MutableMapping, Optional, overload, Sequence,
-                    Tuple, TYPE_CHECKING, TypeVar, Union)
+                    Literal, Mapping, MutableMapping, Optional, overload,
+                    Sequence, Tuple, TYPE_CHECKING, TypeVar, Union)
 
 import numpy as np
 import pandas as pd
@@ -328,7 +329,7 @@ class RunList(Sequence[Run]):
         # Note that config lies in the (multi)index.
         group_config: Dict[str, Any] = dict(zip(g.index.names, g.index[0]))
         h_name = hypothesis_namer(group_config, g.run.values)
-        return Hypothesis(h_name, g['run'].values)
+        return Hypothesis(h_name, g['run'].values, config=group_config)
 
       # yapf: disable
       df = (df
@@ -461,8 +462,33 @@ def varied_config_keys(
 class Hypothesis(Iterable[Run]):
   name: str
   runs: RunList
+  config: Optional[RunConfig] = None
 
-  def __init__(self, name: str, runs: Union[Run, Iterable[Run]]):
+  @typechecked
+  def __init__(
+      self,
+      name: str,
+      runs: Union[Run, Iterable[Run]],
+      *,
+      config: Union[RunConfig, Literal['auto'], None] = 'auto',
+  ):
+    """Create a new Hypothesis object.
+
+    Args:
+      name: The name of the hypothesis. Should be unique within an Experiment.
+      runs: The underlying runs that this hypothesis consists of.
+      config: A config dict that describes the configuration of the hypothesis.
+        A config is optional, where `config` is explicitly set to be `None`.
+        If config exists (not None), it should represent the config this
+        hypothesis primarily concerns: (a subset of) shared config of all the
+        underlying runs, i.e. the hypothesis' config should be compatible with
+        the runs. This constraint should remain at all times, including adding
+        runs in-place after instantiation. By default (`config=auto`) it will
+        try to automatically determine a config by extracting from the configs
+        of all the underlying runs: the intersection of the configs (w.r.t.
+        keys and values). See extract_config() for more details.
+    """
+
     if isinstance(runs, Run) or isinstance(runs, pd.DataFrame):
       if not isinstance(runs, Run):
         runs = Run.of(runs)
@@ -471,19 +497,36 @@ class Hypothesis(Iterable[Run]):
     self.name = name
     self.runs = RunList(runs)
 
+    if config == 'auto':
+      has_configs = [r.config is not None for r in self.runs]
+      if len(self.runs) > 0 and all(has_configs):  # All the runs have a config
+        config = self.extract_config(self.runs)
+      elif not any(has_configs):
+        config = None  # all the runs have no config
+      else:
+        raise ValueError("Run configs should exist for either all the runs or "
+                         "none of the runs. The name of runs that do not have "
+                         "config: {}".format(
+                             r.name for r in self.runs if r.config is None))
+
+    self.config = config
+
   def __iter__(self) -> Iterator[Run]:
     return iter(self.runs)
 
   @classmethod
-  def of(cls,
-         runs: Union[Run, Iterable[Run]],
-         *,
-         name: Optional[str] = None) -> 'Hypothesis':
+  def of(
+      cls,
+      runs: Union[Run, Iterable[Run]],
+      *,
+      name: Optional[str] = None,
+      config: Union[RunConfig, Literal['auto'], None] = 'auto',
+  ) -> 'Hypothesis':
     """A static factory method."""
     if isinstance(runs, Run):
       name = name or runs.path
 
-    return cls(name=name or '', runs=runs)
+    return cls(name=name or '', runs=runs, config=config)
 
   # yapf: disable
   @overload
@@ -522,6 +565,39 @@ class Hypothesis(Iterable[Run]):
     """Report a descriptive statistics as a DataFrame,
     after aggregating all runs (e.g., mean)."""
     return self.mean().describe()
+
+  @staticmethod
+  def extract_config(runs: Sequence[Run]) -> RunConfig:
+    """Extract a config dict from underyling runs. It defaults to the subset
+    of configs that all the runs share and have the identical value."""
+    config = None
+
+    def _intersect(dst, ref):
+      keys = dst.keys() & ref.keys()
+      return {k: dst[k] for k in dst.keys() if k in keys and dst[k] == ref[k]}
+
+    for r in runs:
+      if r.config is None:
+        raise RuntimeError(f"A run of name `{r.name}` does not have a config.")
+      if config is None:
+        config = dict(r.config)
+      else:
+        config = _intersect(config, r.config)
+
+    if config is None:
+      raise RuntimeError("This hypothesis contains no runs.")
+    return config
+
+  def _is_compatible(self, other: Union['Hypothesis', Run]):
+    if self.config and other.config:
+      config: RunConfig = self.config
+      rhs: RunConfig = other.config
+      for k in config:
+        if k not in rhs or config[k] != rhs[k]:
+          return False
+    elif self.config and not other.config:
+      return False  # config for rhs is mandatory.
+    return True
 
   def summary(self, **kwargs) -> pd.DataFrame:
     """Return a DataFrame that summarizes the current hypothesis."""
@@ -653,7 +729,9 @@ class Hypothesis(Iterable[Run]):
         name=self.name,
         runs=[
             Run(r.path, df_new) for (r, df_new) in zip(self.runs, dfs_interp)
-        ])
+        ],
+        config=copy.copy(self.config),
+    )
 
   def apply(self, fn: Callable[[pd.DataFrame], pd.DataFrame]) -> 'Hypothesis':
     """Apply a transformation on all underlying DataFrames.
@@ -663,6 +741,7 @@ class Hypothesis(Iterable[Run]):
     return Hypothesis(
         name=self.name,
         runs=[Run(r.path, fn(r.df)) for r in self.runs],
+        config=copy.copy(self.config),
     )
 
 
@@ -794,7 +873,19 @@ class Experiment(Iterable[Hypothesis]):
       if not extend_if_conflict:
         raise ValueError(f"Hypothesis named {h.name} already exists!")
 
+      util.warn_deprecated(
+          "add_hypothesis(extend_if_conflict=True) is deprecated, because "
+          "it can result in an inconsistent state with config. "
+          "This argument will be removed in a future version.")
+
+      # Validate if the config (hierarchical index) doesn't match.
+      # this assumes the index of hierarhical index matches hypothesis config.
       d: Hypothesis = self._hypotheses[h.name]
+      for r in h.runs:
+        if not d._is_compatible(r):
+          raise ValueError(
+              f"Run {r.name} is not compatible with the existing config.")
+
       d.runs.extend(h.runs)
     else:
       self._hypotheses[h.name] = h
