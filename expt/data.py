@@ -746,30 +746,69 @@ class Hypothesis(Iterable[Run]):
 
 
 class Experiment(Iterable[Hypothesis]):
-  """An Experiment is a collection of Hypotheses, structured with
-  hierarchical MultiIndex."""
+  """An Experiment is a collection of Hypotheses with config structure."""
 
   @typechecked
   def __init__(
       self,
       name: Optional[str] = None,
-      hypotheses: Iterable[Hypothesis] = None,
+      hypotheses: Sequence[Hypothesis] = (),  # TODO Support pd.DataFrame.
+      *,
+      config_keys: Optional[Sequence[str]] = None,
+      summary_columns: Optional[Sequence[str]] = None,  # TODO test this
   ):
+    """Create a new Experiment object.
+
+    Args:
+      name: The name.
+      hypotheses: A collection of hypotheses to initialize with.
+    """
     self._name = name if name is not None else ""
-    self._hypotheses: MutableMapping[str, Hypothesis]
-    self._hypotheses = collections.OrderedDict()
+    self._hypotheses: Dict[str, Hypothesis] = collections.OrderedDict()
+
+    if isinstance(config_keys, str):
+      config_keys = [config_keys]
+    self._config_keys = list(config_keys) if config_keys is not None else []
+
+    if isinstance(summary_columns, str):
+      summary_columns = [summary_columns]
+    self._summary_columns = summary_columns if summary_columns is not None else None
+
+    # The internal pd.DataFrame representation that backs Experiment.
+    # index   = [*config_keys, name: str]  (a MultiIndex)
+    # columns = [hypothesis: Hypothesis, *summary_keys]
 
     if isinstance(hypotheses, np.ndarray):
       hypotheses = list(hypotheses)
 
-    for h in (hypotheses or []):
-      if not isinstance(h, Hypothesis):
-        raise TypeError("An element of hypotheses contains a wrong type: "
-                        "expected {}, but given {} ".format(
-                            Hypothesis, type(h)))
-      if h.name in self._hypotheses:
-        raise ValueError(f"Duplicate hypothesis name: `{h.name}`")
-      self._hypotheses[h.name] = h
+    for h in hypotheses:
+      self.add_hypothesis(h, extend_if_conflict=False)
+
+  @property
+  def _df(self) -> pd.DataFrame:
+    df = pd.DataFrame({
+        'name': list(self._hypotheses.keys()),
+        'hypothesis': list(self._hypotheses.values()),
+        **{  # config keys (will be index)
+            k: [(h.config or {}).get(k) for h in self._hypotheses.values()] \
+            for k in self._config_keys
+        },
+    })
+
+    if self._summary_columns:
+      # TODO: h.summary is expensive and slow, cache it
+      df = pd.concat([
+          df,
+          pd.DataFrame({
+              k: [
+                  h.summary(columns=self._summary_columns).loc[0, k]
+                  for h in self._hypotheses.values()
+              ] for k in self._summary_columns
+          }),
+      ], axis=1)  # yapf: disable
+
+    df = df.set_index([*self._config_keys, 'name'])
+    return df
 
   @classmethod
   def from_dataframe(
@@ -787,7 +826,11 @@ class Experiment(Iterable[Hypothesis]):
     usually constructed from `RunList.to_dataframe()`.
 
     Args:
-      by (str, List[str]): The column name to group by. If None (default),
+      df: The dataframe to create an Experiment from. This should contain
+        a column `run` of `Run` objects, or a column `hypothesis` of
+        `Hypothesis` objects.
+      by (str, List[str]): The column name to group by, when the dataframe
+        consists of Runs (rather than Hypotheses). If None (default),
         it will try to automatically determine from the dataframe if there
         is only one column other than `run_column`.
       run_column (str): The column name that contains `Run` objects.
@@ -809,7 +852,27 @@ class Experiment(Iterable[Hypothesis]):
         raise ValueError("Cannot automatically determine the column to "
                          "group by. Candidates: {}".format(by_columns))
 
-    ex = Experiment(name=name)
+    if isinstance(df.index, pd.MultiIndex):
+      config_keys = tuple(k for k in df.index.names if k != 'name')
+    elif by not in ('hypothesis', 'run'):
+      config_keys = by
+    else:
+      config_keys = None
+
+    def _aslist(x: Union[None, str, Sequence[str]]) -> List[str]:
+      if x is None:
+        return []
+      if isinstance(x, str):
+        return [x]
+      return list(x)
+
+    summary_columns = list(sorted(
+        set(df.columns).difference([run_column, 'hypothesis', *_aslist(by)])
+    ))  # yapf: disable
+    ex = Experiment(
+        name=name,
+        config_keys=config_keys,
+        summary_columns=summary_columns if summary_columns else None)
 
     # Special case: already grouped (see RunList:to_dataframe(as_hypothesis=True))
     # TODO: This groupby feature needs to be incorporated by to_dataframe().
@@ -828,6 +891,10 @@ class Experiment(Iterable[Hypothesis]):
       if hypothesis_namer is None:
         hypothesis_namer = lambda keys, _: str(keys)
 
+        if run_column not in df.columns:
+          raise ValueError(
+              f"The dataframe does not have a column `{run_column}`.")
+
       # A column made of Runs...
       for hypothesis_key, runs_df in df.groupby(by):
         if isinstance(hypothesis_key, tuple):
@@ -842,11 +909,11 @@ class Experiment(Iterable[Hypothesis]):
   def add_runs(
       self,
       hypothesis_name: str,
-      runs: List[Union[Run, Tuple[str, pd.DataFrame], pd.DataFrame]],
-      *,
-      color=None,
-      linestyle=None,
+      runs: Union[List[Union[Run, Tuple[str, pd.DataFrame], pd.DataFrame]],
+                  RunList],
   ) -> Hypothesis:
+    util.warn_deprecated(
+        "add_runs() is deprecated. Use add_hypothesis() instead.")
 
     def check_runs_type(runs) -> List[Run]:
       if isinstance(runs, types.GeneratorType):
@@ -867,8 +934,10 @@ class Experiment(Iterable[Hypothesis]):
   def add_hypothesis(
       self,
       h: Hypothesis,
+      *,
       extend_if_conflict=False,
   ) -> Hypothesis:
+
     if h.name in self._hypotheses:
       if not extend_if_conflict:
         raise ValueError(f"Hypothesis named {h.name} already exists!")
@@ -888,7 +957,7 @@ class Experiment(Iterable[Hypothesis]):
 
       d.runs.extend(h.runs)
     else:
-      self._hypotheses[h.name] = h
+      self._hypotheses[h.name] = h  # add into the collection.
 
     return self._hypotheses[h.name]
 
@@ -1023,22 +1092,6 @@ class Experiment(Iterable[Hypothesis]):
     else:
       raise ValueError("Unsupported index: {}".format(key))
 
-  def __setitem__(
-      self,
-      name: str,
-      hypothesis_or_runs: Union[Hypothesis, List[Run]],
-  ) -> Hypothesis:
-    """An dict-like method for adding hypothesis or runs."""
-    if isinstance(hypothesis_or_runs, Hypothesis):
-      if hypothesis_or_runs in self._hypotheses:
-        raise ValueError(f"A hypothesis named {name} already exists")
-      self._hypotheses[name] = hypothesis_or_runs
-    else:
-      # TODO metadata (e.g. color)
-      self.add_runs(name, hypothesis_or_runs)  # type: ignore
-
-    return self._hypotheses[name]
-
   @property
   def columns(self) -> Iterable[str]:
     # merge and uniquify all columns but preserving the order.
@@ -1128,6 +1181,8 @@ class Experiment(Iterable[Hypothesis]):
             h.interpolate(x_column, n_samples=n_samples)
             for h in self.hypotheses
         ],
+        config_keys=self._config_keys,
+        summary_columns=self._summary_columns,
     )
 
   def apply(self, fn: Callable[[pd.DataFrame], pd.DataFrame]) -> 'Experiment':
@@ -1138,6 +1193,8 @@ class Experiment(Iterable[Hypothesis]):
     return Experiment(
         name=self.name,
         hypotheses=[h.apply(fn) for h in self.hypotheses],
+        config_keys=self._config_keys,
+        summary_columns=self._summary_columns,
     )
 
   def hvplot(self, *args, **kwargs):

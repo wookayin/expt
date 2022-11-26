@@ -1,4 +1,5 @@
 """Tests for expt.data"""
+# pylint: disable=redefined-outer-name
 
 import itertools
 import re
@@ -86,7 +87,8 @@ class TestRun(_TestBase):
 
 class TestRunList(_TestBase):
 
-  def _fixture(self) -> RunList:
+  @staticmethod
+  def _fixture() -> RunList:
     return RunList(
         Run(
             "r%d" % i,
@@ -279,10 +281,19 @@ class TestRunList(_TestBase):
     df = runs.to_dataframe()
     assert df.index.names == ['foo', 'bar']
 
+  @pytest.mark.xfail
+  def test_pivot_table(self, runs_gridsearch: RunList):
+    runs = runs_gridsearch
+
+    # TODO: Add config.
+    df = runs.pivot_table()
+    print(df)
+
 
 class TestHypothesis(_TestBase):
 
-  def _fixture(self):
+  @staticmethod
+  def _fixture():
     # yapf: disable
     h = Hypothesis.of(name="h", runs=[
         # represents y = 2x curve
@@ -436,19 +447,23 @@ class TestHypothesis(_TestBase):
 
 class TestExperiment(_TestBase):
 
-  def test_create_from_dataframe(self, runs_gridsearch: RunList):
+  def test_create_from_dataframe_run(self, runs_gridsearch: RunList):
     """Tests Experiment.from_dataframe with the minimal defaults."""
+
     df = runs_gridsearch.to_dataframe(include_config=False)
-    ex = Experiment.from_dataframe(df)
+    ex = V(Experiment.from_dataframe(df))
     # Each run becomes an individual hypothesis.
     assert len(ex.hypotheses) == 12
 
-  def test_create_from_dataframe_multicolumns(self, runs_gridsearch: RunList):
+  def test_create_from_dataframe_run_multicolumns(self,
+                                                  runs_gridsearch: RunList):
     """Tests Experiment.from_dataframe where the dataframe consists of
-        multiple columns (usually parsed via RunList.extract)."""
+      `runs` and multiple other columns (via RunList.extract)."""
+
     # Reuse the fixture data from testRunListExtract.
     df = runs_gridsearch.extract(
         r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
+    assert 'run' in df.columns and 'hypothesis' not in df.columns
     assert set(df.columns) == set(["algo", "env_id", "seed", "run"])
 
     # If `by` is missing, cannot be automatically determined.
@@ -464,13 +479,21 @@ class TestExperiment(_TestBase):
     assert list(V(ex["ppo"].runs)) == [r for r in runs_gridsearch if "ppo" in r.name]
     assert list(V(ex["sac"].runs)) == [r for r in runs_gridsearch if "sac" in r.name]
     assert ex.name == "Exp.foobar"
+    assert list(ex._df.index.names) == ['algo', 'name']  # Note the order
     # yapf: enable
 
-  def test_create_from_dataframe_general(self, runs_gridsearch: RunList):
-    """Organize a RunList into Hypothesis grouped by (algorithm, env),
-        i.e. only averaging over random seed."""
+    # by: not exists?
+    with pytest.raises(KeyError):  # TODO: Improve exception
+      ex = Experiment.from_dataframe(df, by="unknown", name="Exp.foobar")
+
+  def test_create_from_dataframe_run_general(self, runs_gridsearch: RunList):
+    """Experiment.from_dataframe() from a DataFrame of `run`s, by grouping
+       the runs into Hypothesis by (algorithm, env), i.e. only averaging
+       over random seed."""
+
     df = runs_gridsearch.extract(
         r"(?P<algo>[\w]+)-(?P<env_id>[\w]+)-seed(?P<seed>[\d]+)")
+    assert 'run' in df.columns and 'hypothesis' not in df.columns
 
     # Default: group by ['algo', 'env_id']
     ex = V(Experiment.from_dataframe(df, by=["algo", "env_id"], name="A"))
@@ -484,11 +507,79 @@ class TestExperiment(_TestBase):
     # Group by ['env_id', 'algo'] and use a custom namer
     namer = lambda t, _: f"{t['env_id']}-{t['algo']}"
     ex = V(Experiment.from_dataframe(
-            df, by=["env_id", "algo"], hypothesis_namer=namer, name="B"))  # yapf: disable
+        df, by=["env_id", "algo"], hypothesis_namer=namer, name="B"))  # yapf: disable
     assert ex.hypotheses[0].name == 'halfcheetah-ppo'
     assert len(ex.hypotheses) == 6
 
+  def test_create_from_dataframe_hypothesis(self, runs_gridsearch: RunList):
+    """Create Experiment from a dataframe that has a `hypothesis` column."""
+
+    def config_fn(r: Run):
+      config = {}
+      config['algo'], config['env_id'], config['seed'] = r.name.split('-')
+      return config
+
+    df = runs_gridsearch.to_dataframe(
+        as_hypothesis=True,
+        config_fn=config_fn,
+        include_config=True,
+    )
+    assert 'hypothesis' in df.columns and 'run' not in df.columns
+    assert df.shape[0] == 6  # 6 hypotheses
+
+    # default parameters
+    ex = V(Experiment.from_dataframe(df))
+    assert len(ex.hypotheses) == 6
+    hypothesis_names = [
+        # Note that the default hypothesis_namer is used
+        'algo=ppo; env_id=halfcheetah',
+        'algo=ppo; env_id=hopper',
+        'algo=ppo; env_id=humanoid',
+        'algo=sac; env_id=halfcheetah',
+        'algo=sac; env_id=hopper',
+        'algo=sac; env_id=humanoid',
+    ]
+    assert [ex.hypotheses[i].name for i in range(6)] == hypothesis_names
+
+    # Because df already has a multi-index, so should ex.
+    assert ex._df.index.names == ['algo', 'env_id', 'name']  # Note the order
+    assert list(ex._df.index.get_level_values('name')) == hypothesis_names
+    assert list(ex._df.index.get_level_values('algo')) == (  # ...
+        ['ppo'] * 3 + ['sac'] * 3)
+    assert list(ex._df.index.get_level_values('env_id')) == (
+        ['halfcheetah', 'hopper', 'humanoid'] * 2)
+
+    # an incorrect use of `by`?
+    with pytest.raises(ValueError, match='does not have a column'):
+      ex = Experiment.from_dataframe(df, by="algo")
+
+  def test_add_inplace(self, runs_gridsearch: RunList):
+    """Tests Experiment.add_runs() and Experiment.add_hypothesis()."""
+    ex = Experiment("dummy")
+    ex.add_runs("halfcheetah", [runs_gridsearch[0], runs_gridsearch[1]])
+    ex.add_runs("hopper", runs_gridsearch[2:4])
+
+    assert len(ex.hypotheses) == 2
+    assert isinstance(ex['halfcheetah'], Hypothesis)
+    assert isinstance(ex['hopper'], Hypothesis)
+    assert ex[0].name == 'halfcheetah'
+    assert ex[1].name == 'hopper'
+
+    ex = Experiment("dummy")
+    h0 = Hypothesis.of(runs_gridsearch[0:2], name='halfcheetah')
+    h1 = Hypothesis.of(runs_gridsearch[2:4], name='hopper')
+    ex.add_hypothesis(h0)
+    ex.add_hypothesis(h1)
+
+    assert len(ex.hypotheses) == 2
+    assert isinstance(ex['halfcheetah'], Hypothesis)
+    assert isinstance(ex['hopper'], Hypothesis)
+    assert ex[0].name == 'halfcheetah'
+    assert ex[1].name == 'hopper'
+
   def test_indexing(self):
+    """Tests __getitem__."""
+
     # pylint: disable=unsubscriptable-object
     h0 = Hypothesis("hyp0", Run('r0', pd.DataFrame({"a": [1, 2, 3]})))
     h1 = Hypothesis("hyp1", Run('r1', pd.DataFrame({"a": [4, 5, 6]})))
@@ -557,6 +648,20 @@ class TestExperiment(_TestBase):
       ex.select_top("score", k=0)
     with pytest.raises(ValueError, match='k must be smaller than the number of hypotheses'):  # yapf: disable
       ex.select_top("score", k=6)
+
+  def test_interpolate(self):
+    h: Hypothesis = TestHypothesis._fixture()
+    h.config = {"kind": "interpolate"}
+
+    ex = Experiment(name="interp_test", hypotheses=[h])
+    ex_interpolated = ex.interpolate("x", n_samples=91)
+    assert ex_interpolated.hypotheses[0]._dataframes[0].index.name == 'x'
+    assert ex_interpolated.hypotheses[0]._dataframes[1].index.name == 'x'
+    assert ex_interpolated.hypotheses[0]._dataframes[0].__len__() == 91
+    assert ex_interpolated.hypotheses[0]._dataframes[1].__len__() == 91
+
+    assert ex_interpolated._config_keys == ex._config_keys
+    assert ex_interpolated._summary_columns == ex._summary_columns
 
   def test_plot_method(self):
     import expt.plot

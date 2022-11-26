@@ -864,7 +864,10 @@ class ExperimentPlotter:
 
   @property
   def _columns(self) -> Iterable[str]:
-    return self._parent.columns
+    if self._parent._summary_columns:
+      return self._parent._summary_columns
+    else:
+      return self._parent.columns
 
   def __call__(
       self,
