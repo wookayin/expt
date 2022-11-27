@@ -59,29 +59,6 @@ class TestParseRun:
   def path_csv(self) -> Path:
     return FIXTURE_PATH / "sample_csv"
 
-  def test_parse_tensorboard(self, path_tensorboard):
-    r = data_loader.parse_run(path_tensorboard)
-    assert len(r) >= 400
-    np.testing.assert_array_equal(
-        r.columns,
-        ['accuracy/accuracy', 'global_step', 'xent/xent_1'],
-    )
-    np.testing.assert_array_equal(
-        r.index,
-        np.arange(0, 2000 + 1, 5),
-    )
-
-  def test_parse_progresscsv(self, path_csv):
-    r = data_loader.parse_run(path_csv)
-
-    assert len(r) >= 50
-    np.testing.assert_array_equal(r.columns, [
-        'initial_reset_time',
-        'episode_rewards',
-        'episode_lengths',
-        'episode_end_times',
-    ])
-
   def test_parse_cannot_handle(self, path_csv, path_tensorboard, tmp_path):
     """Tests incompatible logdir format and parser."""
 
@@ -123,6 +100,39 @@ class TestParseRun:
 
     with pytest.raises(data_loader.CannotHandleException):
       p = data_loader._get_reader_for(tmp_path)
+
+  def test_parse_progresscsv(self, path_csv):
+    df: pd.DataFrame = data_loader.parse_run(path_csv)
+
+    assert len(df) >= 50
+    np.testing.assert_array_equal(df.columns, [
+        'initial_reset_time',
+        'episode_rewards',
+        'episode_lengths',
+        'episode_end_times',
+    ])
+
+    # DataFrame from CSV has a consecutive, unnamed index.
+    assert df.index.name is None
+    assert list(df.index.values) == list(range(df.shape[0]))
+
+  def test_parse_tensorboard_py(self, path_tensorboard):
+    # via either rust or python tensorboard
+    df: pd.DataFrame = data_loader.parse_run(
+        path_tensorboard, reader_cls=data_loader.TensorboardLogReader)
+    assert len(df) >= 400
+    np.testing.assert_array_equal(
+        df.columns,
+        ['accuracy/accuracy', 'global_step', 'xent/xent_1'],
+    )
+
+    # index: This tensorboard log has a period of 5.
+    # Note: should have the same result as the rust version.
+    assert df.index.name is None
+    np.testing.assert_array_equal(
+        df.index,
+        np.arange(0, 2000 + 1, 5),
+    )
 
   def test_parse_tensorboard_incremental_read(self, path_tensorboard):
     r = data_loader.TensorboardLogReader(path_tensorboard)

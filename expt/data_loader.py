@@ -102,8 +102,8 @@ class LogReader(abc.ABC, Generic[LogReaderContext]):
     del context
     raise NotImplementedError
 
-  def read_once(self) -> pd.DataFrame:
-    ctx = self.read(self.new_context())
+  def read_once(self, verbose=False) -> pd.DataFrame:
+    ctx = self.read(self.new_context(), verbose=verbose)
     return self.result(ctx)
 
   def __repr__(self):
@@ -217,7 +217,13 @@ if tensorboard or TYPE_CHECKING:
 
 class TensorboardLogReader(  # ...
     LogReader['TensorboardLogReader.Context']):  # type: ignore  # noqa
-  """Log reader for tensorboard run directory."""
+  """A (python-based) Log reader for tensorboard run directory.
+
+  Note that this implementation relies on `tf.io.GFile` which uses some
+  native code to iterate event protobufs, or on tensorboard's fallback
+  in the absence of tensorflow. However, both are very slow, so an use of
+  RustTensorboardLogReader is recommended.
+  """
 
   def __init__(self, log_dir):
     super().__init__(log_dir=log_dir)
@@ -453,7 +459,7 @@ def _get_reader_for(log_dir,
 
 
 def parse_run(
-    log_dir,
+    log_dir: Union[str, Path],
     *,
     reader_cls: Optional[Type[LogReader]] = None,
     verbose=False,
@@ -484,14 +490,11 @@ def parse_run(
 
 
 def parse_run_progresscsv(log_dir, verbose=False) -> pd.DataFrame:
-  util.warn_deprecated("Use of parse_run_progresscsv is deprecated; "
-                       "use LogReader.")
-  return parse_run(log_dir, reader_cls=CSVLogReader, verbose=verbose)
+  return parse_run(log_dir, reader_cls=CSVLogReader,
+                   verbose=verbose)  # yapf: disable
 
 
 def parse_run_tensorboard(log_dir, verbose=False) -> pd.DataFrame:
-  util.warn_deprecated("Use of parse_run_tensorboard is deprecated; "
-                       "use CSVLogReader.")
   return parse_run(log_dir, reader_cls=RustTensorboardLogReader,
                    verbose=verbose)  # yapf: disable
 
