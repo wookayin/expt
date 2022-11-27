@@ -1029,6 +1029,40 @@ class Experiment(Iterable[Hypothesis]):
         ',\n '.join([h.__repr__(indent=' ') for h in self.hypotheses]) +
         ",\n])")
 
+  def _repr_html_(self, include_hypothesis=False, include_name=True):
+    try:
+      from pandas._config import get_option
+    except ImportError:
+      get_option = lambda _: None
+
+    # TODO: more fine-grained control of style.
+    df = self._df
+    if not include_hypothesis:
+      df = df.drop(columns=['hypothesis'], errors='ignore')
+    if not include_name:
+      df = df.drop(columns=['name'], errors='ignore')
+
+    # TODO: the lower the better in some cases.
+    df_html = df.style.background_gradient().set_table_styles([
+        {
+            "selector": "td, th",
+            "props": [("border", "1px solid grey !important")]
+        },
+    ]).to_html()
+
+    if not df_html:
+      return None
+
+    return ''.join([
+        '<div>',
+        '<style scoped>.experiment-name { '
+        '    font-weight: bold; font-size: 14pt; '
+        '}</style>',
+        f'<div class="experiment-name">{self.name}</div>',
+        df_html,
+        '</div>',
+    ])
+
   # yapf: disable
   @overload
   def __getitem__(self, key: str) -> Hypothesis: ...
