@@ -386,8 +386,11 @@ class RustTensorboardLogReader(LogReader[Dict]):
     import expt._internal
     del context  # No context is used, always read in full.
 
-    tmp_prefix = f"expt-{os.path.basename(self.log_dir)}-"
+    tmp_prefix = f"expt-{os.path.basename(self.log_dir)[:64]}-"
     with tempfile.TemporaryDirectory(prefix=tmp_prefix) as tmpdir:
+      tmpdir = os.path.join(tmpdir, os.path.basename(self.log_dir))
+      os.makedirs(tmpdir, exist_ok=False)
+
       if verbose:
         print(f"RustTensorboardLogReader: Downloading to {tmpdir}")
       _download_local = path_util.SFTPPathUtil().download_local
