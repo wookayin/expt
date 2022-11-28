@@ -172,12 +172,18 @@ class SFTPPathUtil(PathUtilInterface):
           host=uri.hostname,
           user=uri.username,
           port=uri.port or 22,
+          connect_timeout=5.0,
       )
       try:
         sftp = conn.sftp()
       except socket.gaierror as ex:
-        raise IOError(f"Cannot establish SSH connection to {uri.netloc}: "
-                      f"{str(ex)}") from ex
+        raise IOError(
+            f"Cannot establish SSH connection to `{uri.netloc}`: {str(ex)}"
+        ) from ex
+      except TimeoutError as ex:
+        raise TimeoutError(
+            f"Cannot establish SSH connection to `{uri.netloc}`: {str(ex)}"
+        ) from ex
 
       if sftp_cache is not None:
         sftp_cache[sftp_cache_key] = (sftp, conn)
