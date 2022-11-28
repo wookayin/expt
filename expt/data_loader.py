@@ -330,6 +330,7 @@ class TensorboardLogReader(  # ...
         chunk[tag_name][global_step] = value
 
     df_chunk = pd.DataFrame(chunk)
+    df_chunk.index.name = 'global_step'
     df_chunk['global_step'] = df_chunk.index.astype(int)
 
     # Merge the previous dataframe and the new one that was read.
@@ -418,6 +419,7 @@ class RustTensorboardLogReader(LogReader[Dict]):
   def result(self, context: Dict) -> pd.DataFrame:
     # context: Dict[str, List[ Tuple[Step, Value] ]]
     df = pd.DataFrame(context)
+    df.index.name = 'global_step'
     df['global_step'] = df.index.astype(int)
     df = df.reindex(sorted(df.columns), axis=1)
     return df

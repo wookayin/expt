@@ -39,11 +39,15 @@ class _TestBase:
 
 @pytest.fixture
 def runs_gridsearch() -> RunList:
+  """12 runs, 6 hypotheses."""
   runs = []
   ALGO, ENV_ID = ["ppo", "sac"], ["halfcheetah", "hopper", "humanoid"]
   for (algo, env_id) in itertools.product(ALGO, ENV_ID):
     for seed in [0, 1]:
-      df = pd.DataFrame({"reward": np.arange(100)})
+      df = pd.DataFrame({
+          "reward": np.arange(100),
+          "global_step": np.arange(0, 1000, 10),
+      }).set_index('global_step')
       run = Run(f"{algo}-{env_id}-seed{seed}", df)
       runs.append(run)
   return RunList(runs)
@@ -257,10 +261,12 @@ class TestRunList(_TestBase):
     # Hypothesis.config exists?
     assert df.hypothesis[0].config == dict(algorithm='ppo', env='halfcheetah')
 
-    # additional option: include_summary
+    # additional option: include_summary (reward)
     df = runs.to_dataframe(
         config_fn=_config_fn, as_hypothesis=True, include_summary=True)
-    assert list(df.columns) == ['hypothesis', 'index', 'reward']
+
+    # Note: global_step is the name of the index in runs_gridsearch
+    assert list(df.columns) == ['hypothesis', 'global_step', 'reward']
     assert df.reward[0] == df.hypothesis[0].summary()['reward'][0]
 
     # Tests index_keys and index_excludelist
@@ -406,7 +412,7 @@ class TestHypothesis(_TestBase):
     assert np.isnan(dfs_interp[0]['y'][dfs_interp[0].index > 8]).all()
     assert np.isnan(dfs_interp[1]['y'][dfs_interp[0].index < 1]).all()
     # non-numeric column (e.g., z) should be dropped
-    assert h_interpolated.columns == ["y"]
+    assert h_interpolated.columns == ['y']
     if False:  # DEBUG
       print(list(zip(dfs_interp[0].index, dfs_interp[0]['y'])))
 
@@ -421,7 +427,20 @@ class TestHypothesis(_TestBase):
     # it should preserve other metadata (e.g., config)
     assert h_interpolated.config == h.config
 
-    # (2) Invalid use
+    # (2) Interpolate with index, no x parameters given
+    h = h.apply(lambda df: df.set_index("x"))
+    assert h.runs[0].df.index.name == 'x'
+    assert h.runs[1].df.index.name == 'x'
+    h_interpolated = h.interpolate(n_samples=91)
+
+    # non-numeric column (e.g., z) should be dropped
+    assert h_interpolated.columns == ['y']
+
+    # index name should be preserved
+    assert h_interpolated.runs[0].df.index.name == 'x'
+    assert h_interpolated.runs[1].df.index.name == 'x'
+
+    # (3) Invalid use
     with pytest.raises(ValueError, match="Unknown column"):
       h_interpolated = h.interpolate("unknown_index", n_samples=1000)
 

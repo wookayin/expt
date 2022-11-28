@@ -5,10 +5,12 @@ import collections
 import concurrent.futures
 import contextlib
 import functools
-from typing import Callable, List
+from typing import Callable, Collection, List, TypeVar
 import warnings
 
 from typeguard import typechecked
+
+T = TypeVar('T')
 
 # Make DeprecationWarning within expt printed, but only once
 warnings.filterwarnings(
@@ -57,6 +59,16 @@ def merge_list(*lists):
   for item in lists:
     merged.update(collections.OrderedDict.fromkeys(item))
   return list(merged)
+
+
+def ensure_unique(items: Collection[T]) -> T:
+  s = set(items)
+  if len(s) == 0:
+    raise ValueError("`items` is empty.")
+  elif len(s) == 1:
+    return next(iter(s))
+
+  raise ValueError("`items` contains non-unique values: {s}")
 
 
 # Fallback for tqdm.

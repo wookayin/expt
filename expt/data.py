@@ -677,13 +677,16 @@ class Hypothesis(Iterable[Run]):
       other non-numeric columns will be dropped. Each DataFramew will have
       the specified x_column as its Index.
     """
-    # For each dataframe (run), interpolate on x
+    # For each dataframe (run), interpolate on the `x_column` or index
     if x_column is None:
       x_series = pd.concat([pd.Series(df.index) for df in self._dataframes])
+      index_name = util.ensure_unique(
+          [df.index.name for df in self._dataframes])
     else:
       if x_column not in self.columns:
         raise ValueError(f"Unknown column: {x_column}")
       x_series = pd.concat([df[x_column] for df in self._dataframes])
+      index_name = x_column
 
     x_min = x_series.min()
     x_max = x_series.max()
@@ -720,8 +723,8 @@ class Hypothesis(Iterable[Run]):
       # yapf: enable
 
       df_interp = df.apply(_interpolate_if_numeric)
-      df_interp[x_column] = x_samples
-      df_interp.set_index(x_column, inplace=True)
+      df_interp[index_name] = x_samples
+      df_interp.set_index(index_name, inplace=True)
       dfs_interp.append(df_interp)
 
     assert len(dfs_interp) == len(self.runs)
@@ -1142,7 +1145,7 @@ class Experiment(Iterable[Hypothesis]):
 
     Args:
       columns: The list of columns to show. Defaults to `self.columns` plus
-        `"index"`.
+        `"index"` (or `df.index.name` if exists).
       aggregate: A function or a dict of functions ({column_name: ...})
         specifying a strategy to aggregate a `Series`. Defaults to take the
         average of the last 10% of the series.
@@ -1154,9 +1157,6 @@ class Experiment(Iterable[Hypothesis]):
       >>> df.style.background_gradient(cmap='viridis')
 
     """
-    columns = list(columns or (['index'] + list(self.columns)))
-    aggregate = aggregate or self.AGGREGATE_MEAN_LAST(0.1)
-
     if name:
       df = pd.DataFrame({'name': [h.name for h in self.hypotheses]})
     else:
@@ -1167,11 +1167,17 @@ class Experiment(Iterable[Hypothesis]):
         for h in self.hypotheses
     ]
 
+    index_name = (util.ensure_unique({h.index.name for h in hypo_means})
+                  or 'index')  # yapf: disable  # noqa: W503
+
+    columns = list(columns or ([index_name] + list(self.columns)))
+    aggregate = aggregate or self.AGGREGATE_MEAN_LAST(0.1)
+
     def make_summary_series(column: str) -> pd.Series:
 
       def df_series(df: pd.DataFrame):
         # TODO: What if a named column is used as an index?
-        if column == 'index':
+        if column == index_name:
           return df.index
         if column not in df:
           return []
@@ -1185,7 +1191,7 @@ class Experiment(Iterable[Hypothesis]):
         aggregate_fn = aggregate
         if not callable(aggregate_fn):
           aggregate_fn = aggregate[column]  # type: ignore
-        v = aggregate_fn(series) if column != 'index' else series.max()
+        v = aggregate_fn(series) if column != index_name else series.max()
         return v
 
       return pd.Series(

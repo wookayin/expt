@@ -126,9 +126,10 @@ class TestParseRun:
         ['accuracy/accuracy', 'global_step', 'xent/xent_1'],
     )
 
-    # index: This tensorboard log has a period of 5.
+    # index: This tensorboard log has a period of 5, so
+    # the DataFrame's index is not necessarily of consecutive integers.
     # Note: should have the same result as the rust version.
-    assert df.index.name is None
+    assert df.index.name == 'global_step'
     np.testing.assert_array_equal(
         df.index,
         np.arange(0, 2000 + 1, 5),
@@ -177,6 +178,9 @@ class TestParseRun:
         sorted(df.columns),
         sorted(['accuracy/accuracy', 'global_step', 'xent/xent_1']),
     )
+
+    # Note: should have the same result as the python version.
+    assert df.index.name == 'global_step'
     np.testing.assert_array_equal(
         df.index,
         np.arange(0, 2000 + 1, 5),
