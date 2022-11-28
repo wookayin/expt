@@ -223,7 +223,7 @@ class TestRunList(_TestBase):
     varied_config_keys = runs.varied_config_keys(
         config_fn=config_fn, excludelist=['seed'])
 
-    print(f"{varied_config_keys=}")
+    print(f"varied_config_keys = {varied_config_keys}")
     assert 'foo' not in varied_config_keys
     assert 'seed' not in varied_config_keys  # excludelist
     assert varied_config_keys == ('algo', 'env_id', 'r_id')

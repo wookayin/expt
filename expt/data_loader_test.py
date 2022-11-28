@@ -352,6 +352,9 @@ class TestRunLoader:
 
 
 @pytest.mark.benchmark
+@pytest.mark.skipif(
+    importlib.util.find_spec("expt._internal") is None,
+    reason="The rust extension is not available")
 class TestLargeDataBenchmark:
   """Benchmark and performance test for loading large, real-world run data.
 

@@ -35,8 +35,9 @@ import os.path
 import re
 import types
 from typing import (Any, Callable, cast, Dict, Iterable, Iterator, List,
-                    Literal, Mapping, MutableMapping, Optional, overload,
-                    Sequence, Tuple, TYPE_CHECKING, TypeVar, Union)
+                    Mapping, MutableMapping, Optional, overload, Sequence,
+                    Tuple, TYPE_CHECKING, TypeVar, Union)
+from typing_extensions import Literal
 
 import numpy as np
 import pandas as pd
