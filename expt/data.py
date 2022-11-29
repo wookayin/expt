@@ -347,6 +347,7 @@ class RunList(Sequence[Run]):
     if include_summary:
       series = df['run'] if 'run' in df else df['hypothesis']
       assert series is not None
+
       # TODO check name?
       df = series.apply(lambda h: h.summary(name=False).iloc[0])
 
@@ -1131,7 +1132,7 @@ class Experiment(Iterable[Hypothesis]):
       raise ValueError("Unsupported index: {}".format(key))
 
   @property
-  def columns(self) -> Iterable[str]:
+  def columns(self) -> Sequence[str]:
     # merge and uniquify all columns but preserving the order.
     return util.merge_list(*[h.columns for h in self._hypotheses.values()])
 
@@ -1171,7 +1172,14 @@ class Experiment(Iterable[Hypothesis]):
     index_name = (util.ensure_unique({h.index.name for h in hypo_means})
                   or 'index')  # yapf: disable  # noqa: W503
 
-    columns = list(columns or ([index_name] + list(self.columns)))
+    if columns is None:
+      if index_name not in self.columns:
+        columns = [index_name] + list(self.columns)
+      else:
+        columns = list(self.columns)
+    else:
+      columns = list(columns)
+
     aggregate = aggregate or self.AGGREGATE_MEAN_LAST(0.1)
 
     def make_summary_series(column: str) -> pd.Series:
@@ -1205,7 +1213,9 @@ class Experiment(Iterable[Hypothesis]):
         [make_summary_series(column) for column in columns],
         axis=1)
 
-    return cast(pd.DataFrame, df)
+    assert len(df.columns) == len(set(df.columns.values)), (
+        f"The columns of summary DataFrame must be unique. Found: {df.columns}")
+    return df
 
   def interpolate(self,
                   x_column: Optional[str] = None,

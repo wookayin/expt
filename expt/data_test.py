@@ -4,7 +4,7 @@
 import itertools
 import re
 import sys
-from typing import cast
+from typing import Any, cast, Dict
 
 import numpy as np
 import pandas as pd
@@ -44,10 +44,18 @@ def runs_gridsearch() -> RunList:
   ALGO, ENV_ID = ["ppo", "sac"], ["halfcheetah", "hopper", "humanoid"]
   for (algo, env_id) in itertools.product(ALGO, ENV_ID):
     for seed in [0, 1]:
-      df = pd.DataFrame({
+      data: Dict[str, Any] = {
           "reward": np.arange(100),
           "global_step": np.arange(0, 1000, 10),
-      }).set_index('global_step')
+          # all the hypotheses may not have the identical columns.
+          f"{algo}_loss": np.zeros(100),
+      }
+      if seed == 0:
+        data.update({
+            f"{algo}_loss": np.zeros(100),
+        })
+      df = pd.DataFrame(data).set_index('global_step')
+      df['global_step'] = list(df.index.values)
       run = Run(f"{algo}-{env_id}-seed{seed}", df)
       runs.append(run)
   return RunList(runs)
@@ -266,7 +274,9 @@ class TestRunList(_TestBase):
         config_fn=_config_fn, as_hypothesis=True, include_summary=True)
 
     # Note: global_step is the name of the index in runs_gridsearch
-    assert list(df.columns) == ['hypothesis', 'global_step', 'reward']
+    assert list(df.columns) == [
+        'hypothesis', 'reward', 'ppo_loss', 'global_step', 'sac_loss'
+    ]
     assert df.reward[0] == df.hypothesis[0].summary()['reward'][0]
 
     # Tests index_keys and index_excludelist
@@ -299,7 +309,7 @@ class TestRunList(_TestBase):
 class TestHypothesis(_TestBase):
 
   @staticmethod
-  def _fixture():
+  def _fixture(named_index=False):
     # yapf: disable
     h = Hypothesis.of(name="h", runs=[
         # represents y = 2x curve
@@ -315,6 +325,14 @@ class TestHypothesis(_TestBase):
             "z": [{"v": -1}, {"v": -2}, {"v": -3}, {"v": -4}, {"v": -5}],
         })),
     ])
+
+    if named_index:
+      for r in h.runs:
+        # Duplicate 'x' (like global_step) as the index and a column.
+        r.df['_index'] = r.df['x']
+        r.df = r.df.set_index('_index')
+        r.df.index.name = 'x'
+
     # yapf: enable
     return h
 
@@ -379,6 +397,7 @@ class TestHypothesis(_TestBase):
     assert h.config == {"foo": "bar"}
 
   def test_summary(self):
+    # (1) with unnamed index.
     r0 = Run("r0", pd.DataFrame({"x": np.arange(100), "y": np.arange(100)}))
     r1 = Run("r1", pd.DataFrame({"x": np.zeros(100), "y": np.arange(100)}))
     h = Hypothesis.of(name="hello", runs=[r0, r1])
@@ -387,11 +406,25 @@ class TestHypothesis(_TestBase):
     print(df)
     assert len(df) == 1
     assert df['name'][0] == 'hello'
+    # the summary columns should include "index"
+    assert list(df.columns) == ['name', 'index', 'x', 'y']
 
     # The default behavior is average of last 10% rows.
     assert df['x'][0] == np.mean(range(90, 100)) / 2.0
     assert df['y'][0] == np.mean(range(90, 100))
     assert df['index'][0] == 99  # max(index)
+
+    # (2) with named index ('global_step') with a same column name
+    h: Hypothesis = self._fixture(named_index=True)
+    assert h.columns == ['x', 'y', 'z']
+    df = h.summary()
+
+    print(df)
+    assert len(df) == 1
+    assert df['name'][0] == 'h'
+    # the summary columns should include the name of index (`x`)
+    # as well as other columns in the correct order
+    assert list(df.columns) == ['name', 'x', 'y', 'z']
 
   def test_interpolate(self):
     """Tests interpolate and subsampling when runs have different support."""
