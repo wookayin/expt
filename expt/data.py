@@ -34,9 +34,9 @@ import itertools
 import os.path
 import re
 import types
-from typing import (Any, Callable, cast, Dict, Iterable, Iterator, List,
-                    Mapping, MutableMapping, Optional, overload, Sequence,
-                    Tuple, TYPE_CHECKING, TypeVar, Union)
+from typing import (Any, Callable, cast, Dict, Hashable, Iterable, Iterator,
+                    List, Mapping, MutableMapping, Optional, overload,
+                    Sequence, Tuple, TYPE_CHECKING, TypeVar, Union)
 from typing_extensions import Literal
 
 import numpy as np
@@ -451,6 +451,8 @@ def varied_config_keys(
   key_values = collections.defaultdict(set)
   for r in runs:
     for k, v in config_fn(r).items():
+      if not isinstance(v, Hashable):
+        v = str(v)  # for instance, list is not hashable, e.g., "[64, 64]"
       key_values[k].add(v)
 
   keys = tuple(k for (k, values) in key_values.items() if len(values) > 1)

@@ -225,6 +225,7 @@ class TestRunList(_TestBase):
       config = {}
       config['algo'], config['env_id'], config['seed'] = r.name.split('-')
       config['common_opts'] = 'shared'
+      config['common_opts_2'] = [64, 64]  # list is unhashable
       config['r_id'] = id(r)
       return config
 
