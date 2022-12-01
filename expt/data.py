@@ -282,15 +282,20 @@ class RunList(Sequence[Run]):
                 f"'{k}' not found in the config of {run}. Close matches: " +
                 str(difflib.get_close_matches(k, config.keys())))
           v = config[k]
+          if isinstance(v, list):
+            # list is not hashable and not immutable, convert to a tuple.
+            v = tuple(v)
+
           dtype = np.array(v).dtype
           if k not in df:
+            # Create a new column if not exists
             # TODO: Consider NaN as a placeholder value rather than empty str.
-            df[k] = ''  # create a new column if not exists
+            df[k] = pd.Series([''] * len(self._runs), dtype=object)
             if k not in index_excludelist:
               config_keys.append(k)
 
           try:
-            df.loc[i, k] = v
+            df.at[i, k] = v
           except ValueError as e:
             raise ValueError(f"Failed to assign index for '{k}' "
                              f"with type {type(v)}") from e

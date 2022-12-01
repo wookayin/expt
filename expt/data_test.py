@@ -253,11 +253,20 @@ class TestRunList(_TestBase):
     # with custom config_fn
     def _config_fn(run: Run):
       algorithm, env, seed = run.name.split('-')
-      return dict(algorithm=algorithm, env=env, seed=seed, common="common")
+      config: Dict[str, Any] = dict(
+          algorithm=algorithm,
+          env=env,
+          seed=seed,
+          common="common",
+      )
+      config['hidden_dims'] = ([64, 64, 64] if env == 'humanoid' \
+                               else [64, 64])
+      return config
 
     df = runs.to_dataframe(config_fn=_config_fn)
     print(df)
-    assert df.index.names == ['algorithm', 'env']  # should exclude 'common'
+    # index: should exclude 'common'
+    assert df.index.names == ['algorithm', 'env', 'hidden_dims']
     assert list(df.columns) == ['seed', 'name', 'run']  # in order!
     assert isinstance(df.run[0], Run)
 
@@ -265,10 +274,15 @@ class TestRunList(_TestBase):
     df = runs.to_dataframe(config_fn=_config_fn, as_hypothesis=True)
     print(df)
     assert list(df.columns) == ['hypothesis']  # no 'name'
-    assert df.hypothesis[0].name == 'algorithm=ppo; env=halfcheetah'
     assert isinstance(df.hypothesis[0], Hypothesis)
     # Hypothesis.config exists?
-    assert df.hypothesis[0].config == dict(algorithm='ppo', env='halfcheetah')
+    assert df.hypothesis[0].config == dict(
+        algorithm='ppo',
+        env='halfcheetah',
+        hidden_dims=(64, 64),  # Note: list converted to tuple
+    )
+    assert df.hypothesis[0].name == (
+        'algorithm=ppo; env=halfcheetah; hidden_dims=(64, 64)')
 
     # additional option: include_summary (reward)
     df = runs.to_dataframe(
@@ -285,7 +299,7 @@ class TestRunList(_TestBase):
                            index_keys=['algorithm', 'common'])
     assert df.index.names == ['algorithm', 'common']
     df = runs.to_dataframe(config_fn=_config_fn, index_excludelist=['env'])
-    assert df.index.names == ['algorithm', 'seed']
+    assert df.index.names == ['algorithm', 'seed', 'hidden_dims']
 
   def test_to_dataframe_singlerun(self, runs_gridsearch: RunList):
     run = runs_gridsearch[0]
