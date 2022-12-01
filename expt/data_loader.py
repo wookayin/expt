@@ -14,7 +14,7 @@ import pathlib
 from pathlib import Path
 import sys
 import tempfile
-from typing import (Any, Callable, Dict, Generic, Iterator, NamedTuple,
+from typing import (Any, Callable, Dict, Generic, Iterator, List, NamedTuple,
                     Optional, Sequence, Tuple, Type, TYPE_CHECKING, TypeVar,
                     Union)
 
@@ -629,7 +629,7 @@ class RunLoader:
       reader_cls: Union[None, Type[LogReader],  # ...
                         Sequence[Type[LogReader]]] = None,
   ):
-    self._readers = []
+    self._readers: List[LogReader] = []
     self._reader_contexts = []
 
     self._verbose = verbose
@@ -775,7 +775,13 @@ class RunLoader:
       result = []
       for j, future in enumerate(futures):
         reader = self._readers[j]
-        run, self._reader_contexts[j] = future.get()
+        try:
+          run, self._reader_contexts[j] = future.get()
+        except multiprocess.pool.MaybeEncodingError as ex:
+          raise RuntimeError(
+              "{}: Error sending result via multiprocess and pickle for `{}`. "
+              "This is likely a temporary error; please try again.".format(
+                  type(ex).__name__, reader.log_dir)) from None
 
         # TODO: better deal with failed runs.
         if run is not None:
