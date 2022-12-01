@@ -797,7 +797,7 @@ class RunLoader:
     pbar = tqdm_bar
     if pbar is None:
       pbar = tqdm(total=len(self._readers)) \
-        if self._progress_bar else util.NoopTqdm()  # noqa: E127
+        if self._progress_bar else util.NoopTqdm()
 
     for j, reader in enumerate(self._readers):
       run, new_context = self._worker_handler(

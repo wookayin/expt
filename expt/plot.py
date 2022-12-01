@@ -371,7 +371,7 @@ class HypothesisPlotter:
       """Evaluate representative_fn and err_fn."""
 
       representative = representative_fn(h) if representative_fn \
-                       else h.grouped.mean()   # noqa: E127
+                       else h.grouped.mean()
       err_range: Tuple[pd.DataFrame, pd.DataFrame]
       std = err_fn(h) if err_fn else h.grouped.std()
 
