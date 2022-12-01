@@ -1053,9 +1053,18 @@ class Experiment(Iterable[Hypothesis]):
     df_html = df.style.background_gradient().set_table_styles([
         {
             "selector": "td, th",
-            "props": [("border", "1px solid grey !important")]
+            "props": list({
+                "border": "1px solid grey !important",
+                "word-break": "break-word",
+            }.items()),
         },
-    ]).to_html()
+        {
+            "selector": "td.data, th.row_heading",
+            "props": list({
+                "word-break": "keep-all",
+            }.items()),
+        },
+    ]).to_html()  # yapf: disable
 
     if not df_html:
       return None
