@@ -1,9 +1,7 @@
 """setup.py for expt"""
 
 import ast
-from distutils.errors import DistutilsPlatformError
 import os
-import re
 import shutil
 import sys
 import textwrap
@@ -13,8 +11,8 @@ from setuptools import setup
 
 try:
   from setuptools_rust import Binding
-  from setuptools_rust import RustExtension
   from setuptools_rust import build_rust
+  from setuptools_rust import RustExtension
   from setuptools_rust.command import get_rust_version
 except ImportError:
   sys.stderr.write(textwrap.dedent(
@@ -35,6 +33,7 @@ class build_rust_for_expt(build_rust):
 
   def run(self):
     if not EXPT_DISABLE_RUST and get_rust_version() is None:
+      from distutils.errors import DistutilsPlatformError
       raise DistutilsPlatformError(
           "Rust toolchain (cargo, rustc) not found. "
           "Please install rust toolchain to build expt with the rust extension. "
@@ -44,18 +43,20 @@ class build_rust_for_expt(build_rust):
 
 
 def read_readme():
-  with open('README.md') as f:
+  with open('README.md', encoding='utf-8') as f:
     return f.read()
 
 
+try:
+  import setuptools_scm
+except ImportError as ex:
+  raise ImportError("setuptools_scm not found. When running setup.py directly, "
+                    "setuptools_scm needs to be installed manually. "
+                    "Or consider running `pip install -e .` instead.") from ex
+
+
 def read_version():
-  __PATH__ = os.path.abspath(os.path.dirname(__file__))
-  with open(os.path.join(__PATH__, 'expt/__init__.py')) as f:
-    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]",
-                              f.read(), re.M)  # yapf: disable
-  if version_match:
-    return version_match.group(1)
-  raise RuntimeError("Unable to find __version__ string")
+  return setuptools_scm.get_version()
 
 
 __version__ = read_version()
@@ -90,9 +91,8 @@ class DeployCommand(Command):
         sys.exit(1)
 
     try:
-      from shutil import rmtree
       self.status('Removing previous builds ...')
-      rmtree(os.path.join(__PATH__, 'dist'))
+      shutil.rmtree(os.path.join(__PATH__, 'dist'))
     except OSError:
       pass
 
@@ -133,9 +133,29 @@ tests_requires = [
     'paramiko>=2.8',
 ]
 
+
+def next_semver(version: setuptools_scm.version.ScmVersion):
+  """Determine next development version."""
+
+  if version.branch and 'release' in version.branch:
+    # Release branch: bump up patch versions
+    return version.format_next_version(
+        setuptools_scm.version.guess_next_simple_semver,
+        retain=setuptools_scm.version.SEMVER_PATCH)
+  else:
+    # main/dev branch: bump up minor versions
+    return version.format_next_version(
+        setuptools_scm.version.guess_next_simple_semver,
+        retain=setuptools_scm.version.SEMVER_MINOR)
+
+
 setup(
     name='expt',
     version=__version__,
+    use_scm_version=dict(
+        write_to='expt/_version.py',
+        version_scheme=next_semver,
+    ),
     license='MIT',
     description='EXperiment. Plot. Tabulate.',
     long_description=read_readme(),

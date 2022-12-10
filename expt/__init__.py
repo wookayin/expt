@@ -1,13 +1,22 @@
 """The expt module."""
 # pylint: disable=useless-import-alias
 # flake8: noqa
+# isort: skip_file
 
 import sys
 
 if sys.version_info < (3, 7):
   raise RuntimeError("This library requires python 3.7+.")
 
-__version__ = '0.5.0.dev2'
+try:
+  from ._version import version as __version__
+  from ._version import version_tuple as __version_tuple__
+except (ImportError, AttributeError) as ex:
+  raise ImportError(
+      "Unable to find the `expt.__version__` string. "
+      "Please try reinstalling expt; "
+      "or if you are on a development version, run `pip install -e .` or "
+      "`python setup.py --version` and try again.") from ex
 
 # auto-import submodules
 from . import colors as colors

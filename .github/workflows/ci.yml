@@ -43,6 +43,8 @@ jobs:
 
       - name: Checkout expt
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0   # fetch all tags, and unshallow (setuptools-scm requires them)
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
@@ -72,6 +74,7 @@ jobs:
       - name: Install expt and dependencies
         run: |
           pip install -e ".[test]" --verbose
+          pip show expt | grep -i version
 
       - name: Run tests
         run: |
