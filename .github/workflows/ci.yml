@@ -71,7 +71,7 @@ jobs:
 
       - name: Install expt and dependencies
         run: |
-          pip install -e ".[test]"
+          pip install -e ".[test]" --verbose
 
       - name: Run tests
         run: |
