@@ -594,8 +594,34 @@ class TestExperiment(_TestBase):
     assert 'hypothesis' in df.columns and 'run' not in df.columns
     assert df.shape[0] == 6  # 6 hypotheses
 
-    # default parameters
+    # use default parameters to create ex
     ex = V(Experiment.from_dataframe(df))
+    self._validate_ex_gridsearch(ex)
+
+    # an incorrect use of `by`?
+    with pytest.raises(ValueError, match='does not have a column'):
+      ex = Experiment.from_dataframe(df, by="algo")
+
+  def test_create_from_runs(self, runs_gridsearch: RunList):
+    """Tests Experiment.from_runs with the minimal defaults."""
+
+    def config_fn(r: Run):
+      config = {}
+      config['algo'], config['env_id'], config['seed'] = r.name.split('-')
+      config['common_hparam'] = 1
+      return config
+
+    # Uses default for config_keys: see varied_config_keys.
+    ex = Experiment.from_runs(
+        runs_gridsearch,
+        config_fn=config_fn,
+        name="ex_from_runs",
+    )
+    assert ex.name == "ex_from_runs"
+    assert ex._config_keys == ['algo', 'env_id']  # no 'common_hparam'
+    self._validate_ex_gridsearch(ex)
+
+  def _validate_ex_gridsearch(self, ex: Experiment):
     assert len(ex.hypotheses) == 6
     hypothesis_names = [
         # Note that the default hypothesis_namer is used
@@ -615,10 +641,6 @@ class TestExperiment(_TestBase):
         ['ppo'] * 3 + ['sac'] * 3)
     assert list(ex._df.index.get_level_values('env_id')) == (
         ['halfcheetah', 'hopper', 'humanoid'] * 2)
-
-    # an incorrect use of `by`?
-    with pytest.raises(ValueError, match='does not have a column'):
-      ex = Experiment.from_dataframe(df, by="algo")
 
   def test_add_inplace(self, runs_gridsearch: RunList):
     """Tests Experiment.add_runs() and Experiment.add_hypothesis()."""

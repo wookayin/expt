@@ -358,6 +358,9 @@ class RunList(Sequence[Run]):
 
     return df  # type: ignore
 
+  def to_experiment(self, **kwargs) -> 'Experiment':
+    return Experiment.from_runs(self, **kwargs)
+
   def filter(self, fn: Union[Callable[[Run], bool], str,
                              re.Pattern]) -> 'RunList':
     """Apply a filter and return the filtered runs as another RunList.
@@ -784,7 +787,8 @@ class Experiment(Iterable[Hypothesis]):
 
     if isinstance(summary_columns, str):
       summary_columns = [summary_columns]
-    self._summary_columns = summary_columns if summary_columns is not None else None
+    self._summary_columns = tuple(summary_columns) \
+      if summary_columns is not None else None
 
     # The internal pd.DataFrame representation that backs Experiment.
     # index   = [*config_keys, name: str]  (a MultiIndex)
@@ -821,6 +825,32 @@ class Experiment(Iterable[Hypothesis]):
 
     df = df.set_index([*self._config_keys, 'name'])
     return df
+
+  @classmethod
+  def from_runs(
+      cls,
+      runs: RunList,
+      *,
+      config_fn: Callable[[Run], RunConfig] = _default_config_fn,
+      config_keys: Optional[Sequence[str]] = None,
+      summary_columns: Optional[Sequence[str]] = None,
+      name: Optional[str] = None,
+  ) -> 'Experiment':
+    """Construct a new Experiment object directly from a RunList."""
+
+    df = runs.to_dataframe(
+        include_config=True,
+        config_fn=config_fn,
+        index_keys=config_keys,
+        as_hypothesis=True,
+        include_summary=True,
+        hypothesis_namer=None,  # TODO use more general hypothesis_factory.
+    )
+
+    if summary_columns:
+      df = df[['hypothesis', *summary_columns]]
+
+    return cls.from_dataframe(df, name=name)
 
   @classmethod
   def from_dataframe(
