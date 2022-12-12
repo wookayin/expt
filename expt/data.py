@@ -1062,6 +1062,13 @@ class Experiment(Iterable[Hypothesis]):
     else:
       return candidates[:k]
 
+  def select(self, expr: str) -> 'Experiment':
+    """Select a subset of Hypothesis matching the given criteria."""
+
+    df = self._df.query(expr)
+    name = self.name + "[" + expr + "]"
+    return Experiment.from_dataframe(df, name=name)
+
   def __iter__(self) -> Iterator[Hypothesis]:
     return iter(self._hypotheses.values())
 

@@ -750,7 +750,38 @@ class TestExperiment(_TestBase):
     assert ex_interpolated.hypotheses[0]._dataframes[1].__len__() == 91
 
     assert ex_interpolated._config_keys == ex._config_keys
-    assert ex_interpolated._summary_columns == ex._summary_columns
+    assert ex_interpolated._summary_columns == ex._summary_columns == ('x', 'y')
+
+  def test_select_query(self, runs_gridsearch: RunList):
+    """Tests Experiment.select()"""
+
+    def config_fn(r: Run):
+      config = {}
+      config['algo'], config['env_id'], config['seed'] = r.name.split('-')
+      return config
+
+    df = runs_gridsearch.to_dataframe(
+        as_hypothesis=True,
+        config_fn=config_fn,
+        include_config=True,
+    )
+    base_ex = Experiment.from_dataframe(df)
+    assert len(base_ex.hypotheses) == 6  # [ppo, sac] * (3 envs)
+
+    # Create a sub-view of Experiment by applying the query.
+    ex = base_ex.select('env_id == "halfcheetah"')
+    assert len(ex.hypotheses) == 2
+    assert ex.hypotheses[0].config['env_id'] == "halfcheetah"  # type: ignore
+    assert ex.hypotheses[1].config['env_id'] == "halfcheetah"  # type: ignore
+
+    assert ex._df.index.names == base_ex._df.index.names
+    assert list(ex._df.index.get_level_values('name')) == [
+        'algo=ppo; env_id=halfcheetah',
+        'algo=sac; env_id=halfcheetah',
+    ]
+    # the underlying hypothesis objects must be the same.
+    assert set(ex.hypotheses) == set(h for h in base_ex.hypotheses if \
+                                     'halfcheetah' in h.name)
 
   def test_plot_method(self):
     import expt.plot
