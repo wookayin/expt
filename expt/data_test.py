@@ -472,6 +472,10 @@ class TestHypothesis(_TestBase):
         np.array(dfs_interp[1].loc[dfs_interp[1].index >= 1, 'y']),
         np.array(dfs_interp[1].index[dfs_interp[1].index >= 1]) * 2 + 1)
 
+    # two individual runs now have the same support on the x-axis
+    assert dfs_interp[0].index.min() == dfs_interp[1].index.min() == 0.0
+    assert dfs_interp[0].index.max() == dfs_interp[1].index.max() == 9.0
+
     # it should preserve other metadata (e.g., config)
     assert h_interpolated.config == h.config
 
@@ -742,7 +746,8 @@ class TestExperiment(_TestBase):
     h: Hypothesis = TestHypothesis._fixture()
     h.config = {"kind": "interpolate"}
 
-    ex = Experiment(name="interp_test", hypotheses=[h])
+    ex = Experiment(
+        name="interp_test", hypotheses=[h], summary_columns=('x', 'y'))
     ex_interpolated = ex.interpolate("x", n_samples=91)
     assert ex_interpolated.hypotheses[0]._dataframes[0].index.name == 'x'
     assert ex_interpolated.hypotheses[0]._dataframes[1].index.name == 'x'

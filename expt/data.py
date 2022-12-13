@@ -42,7 +42,7 @@ from typing_extensions import Literal
 import numpy as np
 import pandas as pd
 from pandas.core.groupby.generic import DataFrameGroupBy
-from scipy import interpolate
+import scipy.interpolate
 from typeguard import typechecked
 
 from expt import util
@@ -416,9 +416,11 @@ class RunList(Sequence[Run]):
       name: a function that maps the group (Key) into Hypothesis name (str).
 
     Example:
+      >>> key_func: Callable[[Run], Tuple[str, str]]
       >>> key_func = lambda run: re.search(
       >>>     "algo=(\w+),lr=([.0-9]+)", run.name).group(1, 2)
       >>> for group_name, hypothesis in runs.groupby(key_func):
+      >>>   # group_name: Tuple[str, str]
       >>>   ...
 
     """
@@ -617,8 +619,8 @@ class Hypothesis(Iterable[Run]):
 
   if TYPE_CHECKING:  # Provide type hint and documentation for static checker.
     import expt.plot
-    plot: expt.plot.HypothesisPlotter
-    hvplot: expt.plot.HypothesisHvPlotter
+    plot: expt.plot.HypothesisPlotter  # type: ignore
+    hvplot: expt.plot.HypothesisHvPlotter  # type: ignore
 
   plot = util.PropertyAccessor(  # type: ignore
       "plot", lambda self: _import("expt.plot").HypothesisPlotter(self))
@@ -721,9 +723,9 @@ class Hypothesis(Iterable[Run]):
           # properly deal with nan. So we filter both of x and y series.
           idx_valid = ~np.isnan(y_series)
           if idx_valid.sum() >= 2:
-            return interpolate.interp1d(df.index[idx_valid],
-                                        y_series[idx_valid],
-                                        bounds_error=False)(x_samples)
+            return scipy.interpolate.interp1d(df.index[idx_valid],
+                                              y_series[idx_valid],
+                                              bounds_error=False)(x_samples)
           else:
             # Insufficient data due to a empty/crashed run.
             # Ignore the corner case! TODO: Add warning message.
