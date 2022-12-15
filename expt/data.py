@@ -23,6 +23,8 @@ Note that one can also manage a collection of Experiments (e.g. the same set
 of hypotheses or algorithms applied over different environments or dataset).
 """
 
+from __future__ import annotations
+
 import collections
 import copy
 import dataclasses
@@ -97,7 +99,7 @@ class Run:
     path = self.path.rstrip('/')
     return os.path.basename(path)
 
-  def with_config(self, config: RunConfig) -> 'Run':
+  def with_config(self, config: RunConfig) -> Run:
     """Create a new Run instance with the given `config`."""
     if not isinstance(config, Mapping) and callable(config):
       config = config(self)
@@ -105,7 +107,7 @@ class Run:
       raise TypeError(f"`config` must be a Mapping, but given {type(config)}")
     return dataclasses.replace(self, config=config)
 
-  def to_hypothesis(self) -> 'Hypothesis':
+  def to_hypothesis(self) -> Hypothesis:
     """Create a new `Hypothesis` consisting of only this run."""
     return Hypothesis.of(self)
 
@@ -135,7 +137,7 @@ class RunList(Sequence[Run]):
   """A (immutable) list of Run objects, but with some useful utility
   methods such as filtering, searching, and handy format conversion."""
 
-  def __init__(self, runs: Union[Run, Iterable[Run]]):
+  def __init__(self, runs: Run | Iterable[Run]):
     runs = self._validate_type(runs)
     self._runs: List[Run] = list(runs)
 
@@ -163,10 +165,10 @@ class RunList(Sequence[Run]):
   @overload
   def __getitem__(self, index_or_slice: int) -> Run: ...
   @overload
-  def __getitem__(self, index_or_slice: slice) -> 'RunList': ...
+  def __getitem__(self, index_or_slice: slice) -> RunList: ...
   # yapf: enable
 
-  def __getitem__(self, index_or_slice) -> Union[Run, 'RunList']:
+  def __getitem__(self, index_or_slice) -> Run | RunList:
     o = self._runs[index_or_slice]
     if isinstance(index_or_slice, slice):
       o = RunList(o)
@@ -358,11 +360,10 @@ class RunList(Sequence[Run]):
 
     return df  # type: ignore
 
-  def to_experiment(self, **kwargs) -> 'Experiment':
+  def to_experiment(self, **kwargs) -> Experiment:
     return Experiment.from_runs(self, **kwargs)
 
-  def filter(self, fn: Union[Callable[[Run], bool], str,
-                             re.Pattern]) -> 'RunList':
+  def filter(self, fn: Callable[[Run], bool] | str | re.Pattern) -> RunList:
     """Apply a filter and return the filtered runs as another RunList.
 
     The filter is a function (Run -> bool). Only runs that evaluates this
@@ -381,7 +382,7 @@ class RunList(Sequence[Run]):
       fn = lambda run: bool(pat.search(run.name))
     return RunList(filter(fn, self._runs))
 
-  def grep(self, regex: Union[str, re.Pattern], flags=0):
+  def grep(self, regex: str | re.Pattern, flags=0):
     """Apply a regex-based filter on the path of `Run`, and return the
     matched `Run`s as a RunList."""
     if isinstance(regex, str):
@@ -393,7 +394,7 @@ class RunList(Sequence[Run]):
     as a plain list."""
     return list(map(func, self._runs))
 
-  def to_hypothesis(self, name: str) -> 'Hypothesis':
+  def to_hypothesis(self, name: str) -> Hypothesis:
     """Create a new Hypothesis instance containing all the runs
     as the current RunList instance."""
     return Hypothesis.of(self, name=name)
@@ -531,11 +532,11 @@ class Hypothesis(Iterable[Run]):
   @classmethod
   def of(
       cls,
-      runs: Union[Run, Iterable[Run]],
+      runs: Run | Sequence[Run],
       *,
       name: Optional[str] = None,
       config: Union[RunConfig, Literal['auto'], None] = 'auto',
-  ) -> 'Hypothesis':
+  ) -> Hypothesis:
     """A static factory method."""
     if isinstance(runs, Run):
       name = name or runs.path
@@ -602,7 +603,7 @@ class Hypothesis(Iterable[Run]):
       raise RuntimeError("This hypothesis contains no runs.")
     return config
 
-  def _is_compatible(self, other: Union['Hypothesis', Run]):
+  def _is_compatible(self, other: Hypothesis | Run):
     if self.config and other.config:
       config: RunConfig = self.config
       rhs: RunConfig = other.config
@@ -673,7 +674,7 @@ class Hypothesis(Iterable[Run]):
   def interpolate(self,
                   x_column: Optional[str] = None,
                   *,
-                  n_samples: int) -> 'Hypothesis':
+                  n_samples: int) -> Hypothesis:
     """Interpolate by uniform subsampling, and return a processed hypothesis.
 
     This is useful when the hypothesis' individual runs may have heterogeneous
@@ -750,7 +751,7 @@ class Hypothesis(Iterable[Run]):
         config=copy.copy(self.config),
     )
 
-  def apply(self, fn: Callable[[pd.DataFrame], pd.DataFrame]) -> 'Hypothesis':
+  def apply(self, fn: Callable[[pd.DataFrame], pd.DataFrame]) -> Hypothesis:
     """Apply a transformation on all underlying DataFrames.
 
     This returns a copy of Hypothesis and children Run objects.
@@ -837,7 +838,7 @@ class Experiment(Iterable[Hypothesis]):
       config_keys: Optional[Sequence[str]] = None,
       summary_columns: Optional[Sequence[str]] = None,
       name: Optional[str] = None,
-  ) -> 'Experiment':
+  ) -> Experiment:
     """Construct a new Experiment object directly from a RunList."""
 
     df = runs.to_dataframe(
@@ -858,13 +859,13 @@ class Experiment(Iterable[Hypothesis]):
   def from_dataframe(
       cls,
       df: pd.DataFrame,
-      by: Optional[Union[str, Sequence[str]]] = None,
+      by: None | str | Sequence[str] = None,
       *,
       run_column: str = 'run',
       hypothesis_namer: Optional[  # (run_config, runs) -> str
           Callable[[RunConfig, Sequence[Run]], str]] = None,
       name: Optional[str] = None,
-  ) -> 'Experiment':
+  ) -> Experiment:
     """Constructs a new Experiment object from a DataFrame instance,
     that is structured as per the convention. The DataFrame objects are
     usually constructed from `RunList.to_dataframe()`.
@@ -903,7 +904,7 @@ class Experiment(Iterable[Hypothesis]):
     else:
       config_keys = None
 
-    def _aslist(x: Union[None, str, Sequence[str]]) -> List[str]:
+    def _aslist(x: None | str | Sequence[str]) -> List[str]:
       if x is None:
         return []
       if isinstance(x, str):
@@ -953,8 +954,7 @@ class Experiment(Iterable[Hypothesis]):
   def add_runs(
       self,
       hypothesis_name: str,
-      runs: Union[List[Union[Run, Tuple[str, pd.DataFrame], pd.DataFrame]],
-                  RunList],
+      runs: RunList | List[Run | Tuple[str, pd.DataFrame] | pd.DataFrame],
   ) -> Hypothesis:
     util.warn_deprecated(
         "add_runs() is deprecated. Use add_hypothesis() instead.")
@@ -1026,7 +1026,7 @@ class Experiment(Iterable[Hypothesis]):
       key,
       k=None,
       descending=True,
-  ) -> Union[Hypothesis, Sequence[Hypothesis]]:
+  ) -> Hypothesis | Sequence[Hypothesis]:
     """Choose a hypothesis that has the largest value on the specified column.
 
     Args:
@@ -1064,7 +1064,7 @@ class Experiment(Iterable[Hypothesis]):
     else:
       return candidates[:k]
 
-  def select(self, expr: str) -> 'Experiment':
+  def select(self, expr: str) -> Experiment:
     """Select a subset of Hypothesis matching the given criteria."""
 
     df = self._df.query(expr)
@@ -1129,15 +1129,15 @@ class Experiment(Iterable[Hypothesis]):
   @overload
   def __getitem__(self, key: int) -> Hypothesis: ...
   @overload
-  def __getitem__(self, key: Union[Tuple, List, np.ndarray]) -> np.ndarray: ...
+  def __getitem__(self, key: Tuple | List | np.ndarray) -> np.ndarray: ...
   @overload
   def __getitem__(self, key: Tuple) -> pd.DataFrame: ...
   # yapf: enable
 
   def __getitem__(
       self,
-      key: Union[int, str, Tuple, List, np.ndarray],
-  ) -> Union[Hypothesis, np.ndarray, Run, pd.DataFrame]:
+      key: int | str | Tuple | List | np.ndarray,
+  ) -> Hypothesis | np.ndarray | Run | pd.DataFrame:
     """Return self[key].
 
     `key` can be one of the following:
@@ -1275,7 +1275,7 @@ class Experiment(Iterable[Hypothesis]):
   def interpolate(self,
                   x_column: Optional[str] = None,
                   *,
-                  n_samples: int) -> 'Experiment':
+                  n_samples: int) -> Experiment:
     """Apply interpolation to each of the hypothesis, and return a copy
     of new Experiment (and its children Hypothesis/Run) object.
 
@@ -1291,7 +1291,7 @@ class Experiment(Iterable[Hypothesis]):
         summary_columns=self._summary_columns,
     )
 
-  def apply(self, fn: Callable[[pd.DataFrame], pd.DataFrame]) -> 'Experiment':
+  def apply(self, fn: Callable[[pd.DataFrame], pd.DataFrame]) -> Experiment:
     """Apply a transformation on all underlying DataFrames.
 
     This returns a copy of Experiment and children Hypothesis objects.

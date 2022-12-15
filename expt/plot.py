@@ -1,5 +1,7 @@
 """Plotting behavior (matplotlib, hvplot, etc.) for expt.data"""
 
+from __future__ import annotations
+
 import difflib
 import itertools
 from typing import (Any, Callable, cast, Dict, Iterable, List, Optional,
@@ -808,7 +810,7 @@ class LegendSpec(dict):
   __setitem__ = __delitem__ = pop = popitem = _immutable
   clear = setdefault = _immutable  # type: ignore
 
-  def __call__(self, **kwargs) -> 'LegendSpec':
+  def __call__(self, **kwargs) -> LegendSpec:
     # Return an updated copy if it is called.
     return LegendSpec({**self, **kwargs})
 
