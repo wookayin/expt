@@ -61,6 +61,13 @@ def runs_gridsearch() -> RunList:
   return RunList(runs)
 
 
+def _runs_gridsearch_config_fn(r: Run):
+  config = {}
+  config['algo'], config['env_id'], config['seed'] = r.name.split('-')
+  config['common_hparam'] = 1
+  return config
+
+
 class TestRun(_TestBase):
 
   def test_creation(self):
@@ -609,16 +616,10 @@ class TestExperiment(_TestBase):
   def test_create_from_runs(self, runs_gridsearch: RunList):
     """Tests Experiment.from_runs with the minimal defaults."""
 
-    def config_fn(r: Run):
-      config = {}
-      config['algo'], config['env_id'], config['seed'] = r.name.split('-')
-      config['common_hparam'] = 1
-      return config
-
     # Uses default for config_keys: see varied_config_keys.
     ex = Experiment.from_runs(
         runs_gridsearch,
-        config_fn=config_fn,
+        config_fn=_runs_gridsearch_config_fn,
         name="ex_from_runs",
     )
     assert ex.name == "ex_from_runs"
@@ -714,6 +715,54 @@ class TestExperiment(_TestBase):
     with pytest.raises(NotImplementedError):  # TODO
       r = V(ex[['hyp1', 'hyp0'], 'a'])
     # pylint: enable=unsubscriptable-object
+
+  def test_with_config_keys(self, runs_gridsearch: RunList):
+    ex_base = Experiment.from_runs(
+        runs_gridsearch,
+        config_fn=_runs_gridsearch_config_fn,
+        config_keys=['algo', 'env_id', 'common_hparam'],
+    )
+
+    assert ex_base._config_keys == ['algo', 'env_id', 'common_hparam']
+    assert ex_base._df.index.get_level_values( \
+        'algo').tolist() == ['ppo', 'ppo', 'ppo', 'sac', 'sac', 'sac']
+    assert ex_base._df.index.get_level_values( \
+        'env_id').tolist() == ['halfcheetah', 'hopper', 'humanoid'] * 2
+
+    def validate_env_id_algo(ex):
+      assert ex._summary_columns == ex_base._summary_columns
+      assert set(ex._hypotheses.values()) == set(ex_base._hypotheses.values())
+
+      # rows should be sorted according to the new multiindex
+      assert ex._df.index.get_level_values('env_id').tolist() == [
+          'halfcheetah', 'halfcheetah', \
+          'hopper', 'hopper', \
+          'humanoid', 'humanoid',
+      ]
+      assert ex._df.index.get_level_values('common_hparam').tolist() == [1] * 6
+      assert ex._df.index.get_level_values('algo').tolist() == [
+          'ppo', 'sac', 'ppo', 'sac', 'ppo', 'sac'
+      ]
+
+    # (1) full reordering
+    ex1 = ex_base.with_config_keys(['env_id', 'common_hparam', 'algo'])
+    assert ex1._config_keys == ['env_id', 'common_hparam', 'algo']
+    validate_env_id_algo(ex1)
+
+    # (2) partial with ellipsis
+    ex2 = ex_base.with_config_keys(['env_id', ...])
+    assert ex2._config_keys == ['env_id', 'algo', 'common_hparam']
+    validate_env_id_algo(ex2)
+
+    # (3) partial subset. TODO: Things to decide:
+    # - To reduce or not to reduce?
+    # - Hypothesis objects should remain the same or changes in
+    #   name, config, etc.?
+
+    # (4) not existing keys: error
+    with pytest.raises(ValueError, \
+                       match="'foo' not found in the config of") as e:
+      ex_base.with_config_keys(['env_id', 'foo', 'algo'])
 
   def test_select_top(self):
     # yapf: disable

@@ -51,6 +51,11 @@ from expt import util
 
 T = TypeVar('T')
 
+if hasattr(types, 'EllipsisType'):
+  EllipsisType = types.EllipsisType
+else:
+  EllipsisType = type(...)
+
 #########################################################################
 # Data Classes
 #########################################################################
@@ -803,6 +808,17 @@ class Experiment(Iterable[Hypothesis]):
     for h in hypotheses:
       self.add_hypothesis(h, extend_if_conflict=False)
 
+  def _replace(self, **kwargs) -> Experiment:
+    ex = Experiment(
+        name=kwargs.pop('name', self._name),
+        hypotheses=list(self._hypotheses.values()),
+        config_keys=kwargs.pop('config_keys', self._config_keys),
+        summary_columns=kwargs.pop('summary_columns', self._summary_columns),
+    )
+    if kwargs:
+      raise ValueError("Unknown fields: {}".format(list(kwargs.keys())))
+    return ex
+
   @property
   def _df(self) -> pd.DataFrame:
     df = pd.DataFrame({
@@ -826,7 +842,9 @@ class Experiment(Iterable[Hypothesis]):
           }),
       ], axis=1)  # yapf: disable
 
-    df = df.set_index([*self._config_keys, 'name'])
+    # Need to sort index w.r.t the multi-index level hierarchy, because
+    # the order of hypotheses being added is not guaranteed
+    df = df.set_index([*self._config_keys, 'name']).sort_index()
     return df
 
   @classmethod
@@ -1271,6 +1289,41 @@ class Experiment(Iterable[Hypothesis]):
     assert len(df.columns) == len(set(df.columns.values)), (
         f"The columns of summary DataFrame must be unique. Found: {df.columns}")
     return df
+
+  @typechecked
+  def with_config_keys(
+      self,
+      new_config_keys: Sequence[str | EllipsisType],  # type: ignore
+  ) -> Experiment:
+    """Create a new Experiment with the same set of Hypotheses, but a different
+    config keys in the multi-index (usually reordering).
+
+    Note that the underlying hypothesis objects in the new Experiment object
+    won't change, e.g., their name, config, etc. would remain the same.
+
+    Args:
+      new_config_keys: The new list of config keys. This can contain `...`
+        (Ellipsis) as the last element, which refers to all the other keys
+        in the current Experiment that was not included in the list.
+    """
+
+    if new_config_keys[-1] is ...:
+      keys_requested = [x for x in new_config_keys if x is not ...]
+      keys_appended = [x for x in self._config_keys if x not in keys_requested]
+      new_config_keys = keys_requested + keys_appended
+
+    for key in new_config_keys:
+      if not isinstance(key, str):
+        raise TypeError(f"Invalid config key: {type(key)}")
+      for h in self._hypotheses.values():
+        if h.config is None:
+          raise ValueError(f"{h} does not have a config.")
+        if key not in h.config.keys():
+          raise ValueError(f"'{key}' not found in the config of {h}. "
+                           "Close matches: " +
+                           str(difflib.get_close_matches(key, h.config.keys())))
+
+    return self._replace(config_keys=new_config_keys)
 
   def interpolate(self,
                   x_column: Optional[str] = None,
