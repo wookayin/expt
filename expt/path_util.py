@@ -24,7 +24,7 @@ import urllib.parse
 
 import multiprocessing_utils
 
-PathType = Union[str, os.PathLike]
+PathType = Union[str, os.PathLike, PurePath]
 
 if TYPE_CHECKING:
   import fabric
