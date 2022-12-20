@@ -1293,7 +1293,7 @@ class Experiment(Iterable[Hypothesis]):
   @typechecked
   def with_config_keys(
       self,
-      new_config_keys: Sequence[str | EllipsisType],  # type: ignore
+      new_config_keys: Sequence[Union[str, EllipsisType]],  # type: ignore
   ) -> Experiment:
     """Create a new Experiment with the same set of Hypotheses, but a different
     config keys in the multi-index (usually reordering).
