@@ -2,7 +2,6 @@
 
 import ast
 import contextlib
-from distutils.spawn import find_executable
 import fnmatch
 import functools
 from glob import glob as local_glob
@@ -13,6 +12,7 @@ from pathlib import Path
 from pathlib import PurePath
 from pathlib import PurePosixPath
 import shlex
+import shutil
 import socket
 import stat
 import subprocess
@@ -298,7 +298,7 @@ else:
 # Options for gsutil. By default, gsutil is disabled as tf.io.gfile is
 # **much** faster than gsutil commands (for globbing and listing).
 USE_GSUTIL = bool(ast.literal_eval(os.environ.get('USE_GSUTIL', 'True')))
-IS_GSUTIL_AVAILABLE = find_executable("gsutil")
+IS_GSUTIL_AVAILABLE = bool(shutil.which("gsutil"))
 GSUTIL_NO_MATCHES = 'One or more URLs matched no objects'
 
 
