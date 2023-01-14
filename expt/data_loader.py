@@ -16,10 +16,11 @@ import pathlib
 from pathlib import Path
 import sys
 import tempfile
-from typing import (Any, Callable, Dict, Generic, Iterator, List, NamedTuple,
-                    Optional, Sequence, Tuple, Type, TYPE_CHECKING, TypeVar,
-                    Union)
+from typing import (Any, Callable, Dict, Generic, Iterator, List, Mapping,
+                    NamedTuple, Optional, Sequence, Tuple, Type, TYPE_CHECKING,
+                    TypeVar, Union)
 from typing_extensions import get_args  # python 3.7 support
+from typing_extensions import Protocol
 
 import multiprocess.pool
 import numpy as np
@@ -616,6 +617,59 @@ async def get_runs_async(
 
 
 #########################################################################
+# Config Reader
+#########################################################################
+
+RunConfig = Mapping[str, Any]
+
+
+class ConfigReader(Protocol):
+
+  def __call__(self, log_dir: LogDir) -> Optional[RunConfig]:
+    ...  # may raise FileNotFoundError
+
+
+class YamlConfigReader(ConfigReader):
+  """Reads config.yaml from the log directory.
+
+  Raises FileNotFoundError if config can't be found."""
+
+  def __init__(
+      self,
+      config_filename: str = "config.yaml",
+  ):
+    self._config_filename = config_filename
+    try:
+      import yaml
+    except ImportError as ex:
+      raise ImportError("module `yaml` not found. "
+                        "Please install pyyaml>=6.0") from ex
+
+  def __call__(self, log_dir: LogDir) -> Optional[RunConfig]:
+    import yaml
+    p = os.path.join(log_dir, self._config_filename)
+    with path_util.open(p) as fp:
+      d = yaml.load(fp, yaml.SafeLoader)
+    return d
+
+
+class ConfigReaderComposite(ConfigReader):
+
+  def __init__(self, config_readers: Sequence[ConfigReader]):
+    self._config_readers = config_readers
+
+  def __call__(self, log_dir: LogDir) -> Optional[RunConfig]:
+    for reader in self._config_readers:
+      try:
+        return reader(log_dir)
+      except FileNotFoundError:
+        pass
+
+    # No config is available
+    return None
+
+
+#########################################################################
 # Run Loader Objects
 #########################################################################
 
@@ -632,6 +686,7 @@ class RunLoader:
       n_jobs: int = 8,
       pool_class=multiprocess.pool.Pool,
       reader_cls: Type[LogReader] | Sequence[Type[LogReader]] | None = None,
+      config_reader: ConfigReader | Sequence[ConfigReader] | None = None,
   ):
     self._readers: List[LogReader] = []
     self._reader_contexts = []
@@ -643,6 +698,12 @@ class RunLoader:
     if isinstance(reader_cls, Type):
       reader_cls = [reader_cls]
     self._reader_cls: Optional[Sequence[Type[LogReader]]] = reader_cls
+
+    if config_reader is None:
+      config_reader = [YamlConfigReader()]
+    elif not isinstance(config_reader, Sequence):
+      config_reader = [config_reader]
+    self._config_reader: ConfigReader = ConfigReaderComposite(config_reader)
 
     self.add_paths(*path_globs)
 
@@ -704,15 +765,24 @@ class RunLoader:
   @staticmethod
   def _worker_handler(
       reader: LogReader,  # pickled and passed into a worker
+      config_reader: ConfigReader,  # pickled as well..
       context: LogReaderContext,
       run_postprocess_fn: Optional[Callable[[Run], Run]] = None,
   ) -> Tuple[Optional[Run], LogReaderContext]:
     """The job function to be executed in a "forked" worker process."""
     try:
       with path_util.session():
+        # read run data
         context = reader.read(context)
         df = reader.result(context)
         run = Run(path=reader.log_dir, df=df)
+
+        # read config
+        config: Optional[RunConfig] = config_reader(reader.log_dir)
+        if config is not None:
+          run.config = config
+
+        # postprocess if specified
         if run_postprocess_fn:
           run = run_postprocess_fn(run)
           _validate_run_postprocess(run)
@@ -763,7 +833,7 @@ class RunLoader:
             self._worker_handler,
             # Note: Serialization of context can be EXTREMELY slow
             # depending on the data type of context objects.
-            args=[reader, context],
+            args=[reader, self._config_reader, context],
             kwds=dict(run_postprocess_fn=self._run_postprocess_fn),
             callback=_pbar_callback_done,
             error_callback=_pbar_callback_error,
@@ -813,6 +883,7 @@ class RunLoader:
       run, new_context = self._worker_handler(
           reader=reader,
           context=self._reader_contexts[j],
+          config_reader=self._config_reader,
           run_postprocess_fn=self._run_postprocess_fn)
       self._reader_contexts[j] = new_context
 
@@ -860,5 +931,7 @@ __all__ = (
     'CSVLogReader',
     'TensorboardLogReader',
     'RustTensorboardLogReader',
+    'ConfigReader',
+    'YamlConfigReader',
     'RunLoader',
 )

@@ -252,6 +252,27 @@ class TestGetRunsRemote:
     assert runs[1].path.rstrip('/') == self.paths["scp"].rstrip('/')
 
 
+class TestConfigReader:
+  """Tests ConfigReader."""
+
+  def test_config_yaml(self):
+    r = data_loader.YamlConfigReader(config_filename="config.yaml")
+    cfg = r(FIXTURE_PATH / "sample_csv")
+    assert isinstance(cfg, dict)
+
+    assert cfg['name'] == 'sample_csv'
+    assert cfg['param1'] == 'foo'
+    assert cfg['param2'] == 'bar'
+
+    # the behavior of nested config key is undefined at the moment,
+    # but yaml reads the config file as nested dicts which is quite natural
+    assert cfg['nested'] == {'foo': 1, 'bar': 2}
+
+    # config.yaml not exists?
+    with pytest.raises(FileNotFoundError):
+      r(FIXTURE_PATH / "lr_1E-03,conv=1,fc=2")
+
+
 class TestRunLoader:
   """Tests loading of multiple runs at once, in parallel."""
 
@@ -260,7 +281,7 @@ class TestRunLoader:
       FIXTURE_PATH / "lr_1E-03,conv=2,fc=2",
       FIXTURE_PATH / "lr_1E-04,conv=1,fc=2",
       FIXTURE_PATH / "lr_1E-04,conv=2,fc=2",
-      FIXTURE_PATH / "sample_csv",
+      FIXTURE_PATH / "sample_csv",  # note: this has config.yaml
   ]
 
   @classmethod
@@ -341,6 +362,33 @@ class TestRunLoader:
     for r, r2 in zip(runs, runs_2):
       assert r.path == r2.path
       np.testing.assert_array_equal(r.df, r2.df)
+
+  def test_run_loader_config(self):
+    # default config_reader
+    loader = data_loader.RunLoader(self.paths[-1])
+    run = loader.get_runs()[0]
+    assert run.path.endswith('sample_csv')
+    assert run.config is not None
+
+    # default config_reader, that has no config
+    loader = data_loader.RunLoader(self.paths[0])
+    run = loader.get_runs()[0]
+    assert run.path.index('conv=1,fc=2') > 0
+    assert run.config is None
+
+    # disabled config_reader
+    loader = data_loader.RunLoader(self.paths[-1], config_reader=())
+    run = loader.get_runs()[0]
+    assert run.path.endswith('sample_csv')
+    assert run.config is None
+
+    # custom config_reader
+    dummy_reader = lambda _: dict(dummy="config")
+    loader = data_loader.RunLoader(
+        self.paths[-1], config_reader=dummy_reader)  # type: ignore
+    run = loader.get_runs()[0]
+    assert run.path.endswith('sample_csv')
+    assert run.config == {'dummy': 'config'}
 
   @pytest.mark.asyncio
   @pytest.mark.parametrize("parallel_mode", ['parallel', 'serial'])

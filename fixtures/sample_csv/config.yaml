@@ -1,0 +1,7 @@
+name: sample_csv
+param1: foo
+param2: bar
+
+nested:
+  foo: 1
+  bar: 2
