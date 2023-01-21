@@ -1360,7 +1360,7 @@ class Experiment(Iterable[Hypothesis]):
     plot = None
     for i, (name, hypo) in enumerate(self._hypotheses.items()):
       p = hypo.hvplot(*args, label=name, **kwargs)
-      plot = (plot * p) if plot else p
+      plot = (plot * p) if plot else p  # type: ignore
     return plot
 
   if TYPE_CHECKING:  # Provide type hint and documentation for static checker.
