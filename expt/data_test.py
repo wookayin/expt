@@ -448,6 +448,25 @@ class TestHypothesis(_TestBase):
     # as well as other columns in the correct order
     assert list(df.columns) == ['name', 'x', 'y', 'z']
 
+  def test_resample(self):
+    h: Hypothesis = self._fixture()
+    h.config = {"kind": "resample"}
+
+    h2 = h.resample("x", n_samples=91)
+
+    # it should preserve other metadata (e.g., config)
+    assert h2.name == h.name
+    assert h2.config == h.config
+
+    # all the dataframes should have the same length
+    assert all(len(df) == 91 for df in h2._dataframes)
+
+    # non-numeric columns will be preserved.
+    # x is not a index but a normal column?
+    assert h2.columns == ['x', 'y', 'z']
+
+    # TODO: Errorneous case: when n_samples > #data points
+
   def test_interpolate(self):
     """Tests interpolate and subsampling when runs have different support."""
     h: Hypothesis = self._fixture()
@@ -790,6 +809,19 @@ class TestExperiment(_TestBase):
       ex.select_top("score", k=0)
     with pytest.raises(ValueError, match='k must be smaller than the number of hypotheses'):  # yapf: disable
       ex.select_top("score", k=6)
+
+  def test_resample(self):
+    h: Hypothesis = TestHypothesis._fixture()
+    h.config = {"kind": "subsample"}
+
+    ex = Experiment(
+        name="interp_test", hypotheses=[h], summary_columns=('x', 'y'))
+    ex2 = ex.resample(n_samples=91)
+    assert ex2.hypotheses[0]._dataframes[0].__len__() == 91
+    assert ex2.hypotheses[0]._dataframes[1].__len__() == 91
+
+    assert ex2._config_keys == ex._config_keys
+    assert ex2._summary_columns == ex._summary_columns
 
   def test_interpolate(self):
     h: Hypothesis = TestHypothesis._fixture()

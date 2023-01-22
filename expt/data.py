@@ -676,20 +676,24 @@ class Hypothesis(Iterable[Run]):
     g = self.grouped
     return g.max(*args, **kwargs)  # type: ignore
 
-  def interpolate(self,
-                  x_column: Optional[str] = None,
-                  *,
-                  n_samples: int) -> Hypothesis:
-    """Interpolate by uniform subsampling, and return a processed hypothesis.
+  def resample(self,
+               x_column: Optional[str] = None,
+               *,
+               n_samples: int) -> Hypothesis:
+    """Resample (usually downsample) the data by uniform subsampling.
 
-    This is useful when the hypothesis' individual runs may have heterogeneous
-    index (or the x-axis column).
+    This is also useful when the hypothesis' individual runs may have
+    heterogeneous index or the x-axis (i.e., differnet supports): when
+    (linear) interpolation is applied, the resulting Hypothesis will consist of
+    runs with dataframes sharing the same x axis values.
 
     Args:
-      x_column (Optional): the name of column to interpolate on. If None,
-        we interpolate and subsample based on the index of dataframe.
-      n_samples (int): The number of points to use when subsampling and
-        interpolation. Should be greater than 2.
+      x_column (Optional): the name of column to sample over. If `None`,
+        sampling and interpolation will be done over the index of the dataframe.
+      n_samples (int): The number of points to use when subsampling.
+        Should be greater than 2.
+      interpolate (bool): Defaults False. If True, linear interpolation will
+        be applied
 
     Returns:
       A copy of Hypothesis with the same name, whose runs (DataFrames) consists
@@ -697,6 +701,20 @@ class Hypothesis(Iterable[Run]):
       other non-numeric columns will be dropped. Each DataFramew will have
       the specified x_column as its Index.
     """
+    return self._resample(x_column, n_samples, interpolate=False)
+
+  def interpolate(self,
+                  x_column: Optional[str] = None,
+                  *,
+                  n_samples: int) -> Hypothesis:
+    """DEPRECATED: Use resample(..., interpolate=True) instead."""
+    return self._resample(x_column, n_samples=n_samples, interpolate=True)
+
+  def _resample(self,
+                x_column: Optional[str],
+                n_samples: int,
+                *,
+                interpolate=False) -> Hypothesis:
     # For each dataframe (run), interpolate on the `x_column` or index
     if x_column is None:
       x_series = pd.concat([pd.Series(df.index) for df in self._dataframes])
@@ -712,15 +730,10 @@ class Hypothesis(Iterable[Run]):
     x_max = x_series.max()
     x_samples = np.linspace(x_min, x_max, num=n_samples)  # type: ignore
 
-    # Get interpolated dataframes.
-    dfs_interp = []
-    for df in self._dataframes:
-      df: pd.DataFrame
+    # Get interpolated dataframes for numerical columns.
+    def _process_df_interpolate(df: pd.DataFrame) -> pd.DataFrame:
       if x_column is not None:
         df = df.set_index(x_column)  # type: ignore
-
-      # filter out non-numeric columns.
-      df = df.select_dtypes(['number'])
 
       # yapf: disable
       def _interpolate_if_numeric(y_series: pd.Series):
@@ -742,16 +755,30 @@ class Hypothesis(Iterable[Run]):
           assert False, "should have been dropped earlier"
       # yapf: enable
 
-      df_interp = df.apply(_interpolate_if_numeric)
+      # filter out non-numeric columns.
+      df_interp = df.select_dtypes(['number'])
+      df_interp = cast(pd.DataFrame, df_interp.apply(_interpolate_if_numeric))
+
       df_interp[index_name] = x_samples
       df_interp.set_index(index_name, inplace=True)
-      dfs_interp.append(df_interp)
+      return df_interp
 
-    assert len(dfs_interp) == len(self.runs)
+    def _process_df_subsample(df: pd.DataFrame) -> pd.DataFrame:
+      if n_samples <= df.shape[0]:
+        return df
+      idx = np.linspace(0, df.shape[0] - 1, n_samples, dtype=np.int32)
+      return df.loc[idx]
+
+    if interpolate:
+      processed_dfs = [_process_df_interpolate(df) for df in self._dataframes]
+    else:
+      processed_dfs = [_process_df_subsample(df) for df in self._dataframes]
+
+    assert len(processed_dfs) == len(self.runs)
     return Hypothesis(
         name=self.name,
         runs=[
-            Run(r.path, df_new) for (r, df_new) in zip(self.runs, dfs_interp)
+            Run(r.path, df_new) for (r, df_new) in zip(self.runs, processed_dfs)
         ],
         config=copy.copy(self.config),
     )
@@ -1325,12 +1352,26 @@ class Experiment(Iterable[Hypothesis]):
 
     return self._replace(config_keys=new_config_keys)
 
+  def resample(self, *, n_samples: int) -> Experiment:
+    """Resample data uniformly (equidistantly) for each of the hypotheses,
+    and return a copy of new Experiment objet.
+
+    See: Hypothesis.resample().
+    """
+    return Experiment(
+        name=self.name,
+        hypotheses=[h.resample(n_samples=n_samples) for h in self.hypotheses],
+        config_keys=self._config_keys,
+        summary_columns=self._summary_columns,
+    )
+
   def interpolate(self,
                   x_column: Optional[str] = None,
                   *,
                   n_samples: int) -> Experiment:
-    """Apply interpolation to each of the hypothesis, and return a copy
-    of new Experiment (and its children Hypothesis/Run) object.
+    """Apply resampling and interpolation to each of the hypothesis,
+    and return a copy of new Experiment (with its children Hypothesis/Run)
+    object.
 
     See: Hypothesis.interpolate().
     """
