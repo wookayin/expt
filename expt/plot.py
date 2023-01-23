@@ -248,6 +248,7 @@ class GridPlot:
 
 
 class HypothesisPlotter:
+  """Implements expt.data.Hypothesis.plot()."""
 
   def __init__(self, hypothesis: Hypothesis):  # type: ignore
     self._parent = hypothesis
@@ -621,6 +622,8 @@ class HypothesisPlotter:
     if err_style in ('band', 'fill'):
       # show shadowed range of 1-std errors
       for ax, yi in zip(np.asarray(axes).flat, y):
+        if yi not in err_range[0] or yi not in err_range[1]:
+          continue
         ax = cast(Axes, ax)
         mean_line = ax.get_lines()[-1]
         x = kwargs.get('x', None)
