@@ -652,8 +652,12 @@ class HypothesisPlotter:
           if rolling:
             df = df.rolling(rolling, min_periods=1,
                             center=True).mean()  # yapf: disable
-          df.plot(ax=ax, x=x, y=yi, legend=False, label='',
-                  color=color, alpha=runs_alpha)  # yapf: disable
+
+          # Note: the series may have nan (missing) values.
+          df_yi = df[[x, yi]] if x is not None else df[yi]
+          cast(pd.DataFrame, df_yi).dropna().plot(
+              ax=ax, x=x, legend=False, label='',
+              color=color, alpha=runs_alpha)  # yapf: disable
 
     # some sensible styling (grid, tight_layout) AFTER calling plot()
     # Note: 'kwargs[grid]' is for axes and 'grid' means GridPlot
