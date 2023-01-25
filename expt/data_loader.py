@@ -428,6 +428,10 @@ class RustTensorboardLogReader(LogReader[Dict]):
     df.index.name = 'global_step'
     df['global_step'] = df.index.astype(int)
     df = df.reindex(sorted(df.columns), axis=1)
+
+    # Ensure index (timestep) is sorted because the chunk read by
+    # rustboard is not necessarily sorted.
+    df = df.sort_index()
     return df
 
 
