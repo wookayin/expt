@@ -869,6 +869,36 @@ class TestExperiment(_TestBase):
     assert set(ex.hypotheses) == set(h for h in base_ex.hypotheses if \
                                      'halfcheetah' in h.name)
 
+  def test_select_fn(self, runs_gridsearch: RunList):
+    """Tests Experiments.select()"""
+
+    df = runs_gridsearch.to_dataframe(
+        as_hypothesis=True,
+        config_fn=_runs_gridsearch_config_fn,
+        include_config=True,
+    )
+    base_ex = Experiment.from_dataframe(df)
+    assert len(base_ex.hypotheses) == 6  # [ppo, sac] * (3 envs)
+
+    ex = base_ex.select(lambda h: 'humanoid' in h.name)
+    assert len(ex.hypotheses) == 2
+    assert ex.hypotheses[0].config['env_id'] == "humanoid"  # type: ignore
+    assert ex.hypotheses[1].config['env_id'] == "humanoid"  # type: ignore
+
+    ex = base_ex.select(lambda h: True)
+    assert len(ex.hypotheses) == len(base_ex.hypotheses)
+
+    ex = base_ex.select(lambda h: h.name == 'algo=sac; env_id=halfcheetah')
+    assert len(ex.hypotheses) == 1
+
+    # error case
+    with pytest.raises(
+        TypeError,
+        match=('The filter function must return bool, '
+               'but unexpected data type found: float64')):
+      ex = base_ex.select(
+          lambda h: np.asarray(1.0, dtype=np.float64))  # type: ignore
+
   def test_plot_method(self):
     import expt.plot
     ex = Experiment("ex", [])

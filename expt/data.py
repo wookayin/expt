@@ -1112,11 +1112,26 @@ class Experiment(Iterable[Hypothesis]):
     else:
       return candidates[:k]
 
-  def select(self, expr: str) -> Experiment:
+  def select(self, expr: str | Callable[[Hypothesis], bool]) -> Experiment:
     """Select a subset of Hypothesis matching the given criteria."""
 
-    df = self._df.query(expr)
-    name = self.name + "[" + expr + "]"
+    if isinstance(expr, str):
+      df = self._df.query(expr)
+      name = self.name + "[" + expr + "]"
+
+    elif callable(expr):  # Hypothesis -> bool
+      df = self._df
+      mask = df['hypothesis'].apply(expr)
+      if mask.dtype != bool:
+        raise TypeError("The filter function must return bool, but unexpected "
+                        "data type found: {}".format(mask.dtype))
+      df = df[mask]
+      name = self.name + " (filtered)"
+
+    else:
+      raise TypeError(  # ...
+          "`expr` must be a str or Callable, but given {}".format(type(expr)))
+
     return Experiment.from_dataframe(df, name=name)
 
   def __iter__(self) -> Iterator[Hypothesis]:
