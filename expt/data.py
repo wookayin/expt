@@ -548,6 +548,9 @@ class Hypothesis(Iterable[Run]):
 
     return cls(name=name or '', runs=runs, config=config)
 
+  def rename(self, name: str) -> Hypothesis:
+    return dataclasses.replace(self, name=name)
+
   # yapf: disable
   @overload
   def __getitem__(self, k: int) -> Run: ...
