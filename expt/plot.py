@@ -206,6 +206,9 @@ class GridPlot:
       labels: If given, this will override label names.
       kwargs: Additional kwargs passed to ax.legend().
           e.g., ncol=4
+
+    Returns:
+      The matplotlib legend object added.
     """
     target: Union[Figure, Axes]
     if ax is None:
@@ -220,6 +223,7 @@ class GridPlot:
       else:
         target = ax
 
+    # TODO: Customize how to sort legend items.
     legend_handles, legend_labels = zip(
         *[(h, l) for (l, h) in sorted(self._collect_legend().items())])
     if labels is not None:
@@ -228,11 +232,12 @@ class GridPlot:
             f"labels {labels} should have length {len(legend_labels)} "
             f"but was given {len(labels)}")
       legend_labels = list(labels)
-    target.legend(legend_handles, legend_labels, loc=loc, **kwargs)
+    legend = target.legend(legend_handles, legend_labels, loc=loc, **kwargs)
 
     if isinstance(target, Axes) and not target.lines:
       target.axis('off')
-    return self
+
+    return legend
 
   def _collect_legend(self) -> Dict[str, Any]:
     """Collect all legend labels from the subplot axes."""
