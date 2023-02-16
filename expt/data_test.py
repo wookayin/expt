@@ -841,14 +841,9 @@ class TestExperiment(_TestBase):
   def test_select_query(self, runs_gridsearch: RunList):
     """Tests Experiment.select()"""
 
-    def config_fn(r: Run):
-      config = {}
-      config['algo'], config['env_id'], config['seed'] = r.name.split('-')
-      return config
-
     df = runs_gridsearch.to_dataframe(
         as_hypothesis=True,
-        config_fn=config_fn,
+        config_fn=_runs_gridsearch_config_fn,
         include_config=True,
     )
     base_ex = Experiment.from_dataframe(df)

@@ -1126,7 +1126,7 @@ class Experiment(Iterable[Hypothesis]):
         raise TypeError("The filter function must return bool, but unexpected "
                         "data type found: {}".format(mask.dtype))
       df = df[mask]
-      name = self.name + " (filtered)"
+      name = self.name  # TODO: Customize? repr(fn)?
 
     else:
       raise TypeError(  # ...
