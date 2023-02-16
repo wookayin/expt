@@ -1070,6 +1070,30 @@ def autoformat_xaxis(ax: Axes, scale: Optional[float] = None):
   return ticks
 
 
+def make_legend_fig(legend: matplotlib.legend.Legend) -> Figure:
+  """Create a new matplotlib figure that contains a copy of the legend."""
+
+  # Get the dimensions (in inches) of the legend's bounding box
+  legend_inches = legend.get_window_extent().transformed(
+      cast(Figure, legend.figure).dpi_scale_trans.inverted())
+
+  fig = Figure(
+      figsize=(
+          legend_inches.width + 0.05,
+          legend_inches.height + 0.05,
+      ))
+  fig.add_axes([0, 0, 1, 1]).axis('off')
+
+  fig.legend(
+      legend.legendHandles,
+      [t.get_text() for t in legend.texts],
+      ncol=legend._ncols,
+      loc='center',
+      bbox_to_anchor=(0.5, 0.5),
+  )
+  return fig
+
+
 HypothesisPlotter.__doc__ = HypothesisPlotter.__call__.__doc__
 HypothesisHvPlotter.__doc__ = HypothesisHvPlotter.__call__.__doc__
 ExperimentPlotter.__doc__ = ExperimentPlotter.__call__.__doc__
