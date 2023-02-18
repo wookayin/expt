@@ -197,7 +197,15 @@ class RunList(Sequence[Run]):
     """Create a new copy of list containing all the runs."""
     return list(self._runs)
 
-  INDEX_EXCLUDE_DEFAULT = ('seed', 'random_seed', 'log_dir', 'train_dir')
+  # TODO: Make this more configurable.
+  INDEX_EXCLUDE_DEFAULT = (
+      'seed',
+      'random_seed',
+      'log_dir',
+      'train_dir',
+      'ckpt_dir',
+      'checkpoint_dir',
+  )
 
   def varied_config_keys(
       self,
