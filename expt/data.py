@@ -135,7 +135,10 @@ class Run:
 def _default_config_fn(run: Run) -> RunConfig:
   if run.config is not None:
     return run.config
-  raise ValueError(f"A Run with name `{run.name}` does not have config.")
+  raise ValueError(
+      f"A Run with name `{run.name}` does not have config. "
+      "For those runs that do not have any config data available "
+      "(see config_reader), consider using the config_fn=... parameter.")
 
 
 class RunList(Sequence[Run]):
