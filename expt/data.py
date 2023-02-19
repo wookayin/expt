@@ -1159,20 +1159,18 @@ class Experiment(Iterable[Hypothesis]):
         ",\n])")
 
   def _repr_html_(self, include_hypothesis=False, include_name=True):
-    try:
-      from pandas._config import get_option
-    except ImportError:
-      get_option = lambda _: None
 
     # TODO: more fine-grained control of style.
     df = self._df
+    hypotheses = df['hypothesis']
+
     if not include_hypothesis:
       df = df.drop(columns=['hypothesis'], errors='ignore')
     if not include_name:
       df = df.drop(columns=['name'], errors='ignore')
 
     # TODO: the lower the better in some cases.
-    df_html = df.style.background_gradient().set_table_styles([
+    df_styler = df.style.background_gradient().set_table_styles([
         {
             "selector": "td, th",
             "props": list({
@@ -1186,18 +1184,31 @@ class Experiment(Iterable[Hypothesis]):
                 "word-break": "keep-all",
             }.items()),
         },
-    ]).to_html()  # yapf: disable
+    ])  # yapf: disable
 
-    if not df_html:
+    if not df_styler:
       return None
+
+    # Add tooltip for individual run information (path)
+    ttips = pd.DataFrame(index=df.index, columns=df.columns)
+    for i, h in enumerate(hypotheses):
+      h = cast(Hypothesis, h)
+      h_summary: pd.DataFrame = h.summary(individual_runs=True)
+      for j, column in enumerate(df.columns):
+        ttips.iloc[i, j] = r'\A'.join(
+            f' {r_val:.6g} ::: {r.path}' \
+            for r, r_val in zip(h.runs, h_summary[column]))
+
+    df_styler = df_styler.set_tooltips(ttips)
 
     return ''.join([
         '<div>',
-        '<style scoped>.experiment-name { '
-        '    font-weight: bold; font-size: 14pt; '
-        '}</style>',
+        '''<style scoped>
+          .experiment-name { font-weight: bold; font-size: 14pt; }
+          .pd-t { background-color: #ffe066 !important; color: black !important; padding: 2px; white-space: pre; }
+        </style>''',
         f'<div class="experiment-name">{self.name}</div>',
-        df_html,
+        df_styler.to_html(),
         '</div>',
     ])
 
