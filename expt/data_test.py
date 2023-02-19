@@ -440,13 +440,22 @@ class TestHypothesis(_TestBase):
     h: Hypothesis = self._fixture(named_index=True)
     assert h.columns == ['x', 'y', 'z']
     df = h.summary()
-
     print(df)
     assert len(df) == 1
     assert df['name'][0] == 'h'
     # the summary columns should include the name of index (`x`)
     # as well as other columns in the correct order
     assert list(df.columns) == ['name', 'x', 'y', 'z']
+
+    # (3) individual_runs mode
+    df = h.summary(individual_runs=True)
+    print(df)
+    assert len(df) == len(h.runs)
+    assert list(df.columns) == ['name', 'x', 'y', 'z']
+    # summary for each of the individual runs
+    # "x": [0, 2, 4, 6, 8]  or [1, 3, 5, 7, 9]
+    np.testing.assert_array_almost_equal(df['x'].values, [8, 9])
+    np.testing.assert_array_almost_equal(df['y'].values, [16, 19])
 
   def test_resample(self):
     h: Hypothesis = self._fixture()

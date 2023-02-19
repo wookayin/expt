@@ -116,6 +116,10 @@ class Run:
     """Create a new `Hypothesis` consisting of only this run."""
     return Hypothesis.of(self)
 
+  @property
+  def _dataframes(self) -> List[pd.DataFrame]:
+    return [self.df]
+
   def summary(self, **kwargs) -> pd.DataFrame:
     """Return a DataFrame that summarizes the current run."""
     df = self.to_hypothesis().summary(**kwargs)
@@ -1270,11 +1274,22 @@ class Experiment(Iterable[Hypothesis]):
     return (lambda series: series.rolling(max(1, int(len(series) * portion))
                                           ).mean().iloc[-1])  # yapf: disable
 
-  def summary(self, *, name=True, columns=None, aggregate=None) -> pd.DataFrame:
+  def summary(
+      self,
+      *,
+      name=True,
+      individual_runs: bool = False,
+      columns: Sequence[str] | None = None,
+      aggregate=None,
+  ) -> pd.DataFrame:
     """Return a DataFrame that summarizes the current experiments,
     whose rows are all hypothesis.
 
     Args:
+      name: If True, include the column 'name'. Otherwise include 'hypothesis'.
+      individual_runs: If True, show the summary of metrics for each of the
+        individual runs. If False (default), show the summary of aggregated,
+        averaged hypothesis.
       columns: The list of columns to show. Defaults to `self.columns` plus
         `"index"` (or `df.index.name` if exists).
       aggregate: A function or a dict of functions ({column_name: ...})
@@ -1288,18 +1303,34 @@ class Experiment(Iterable[Hypothesis]):
       >>> df.style.background_gradient(cmap='viridis')
 
     """
+
+    def _entries():
+      if individual_runs:
+        for h in self.hypotheses:
+          yield from h.runs
+      else:
+        yield from self.hypotheses
+
+    entries: List[Run | Hypothesis] = list(_entries())
+
     if name:
-      df = pd.DataFrame({'name': [h.name for h in self.hypotheses]})
+      df = pd.DataFrame({'name': [h.name for h in entries]})
     else:
-      df = pd.DataFrame({'hypothesis': self.hypotheses})
-    hypo_means = [
-        (h.mean() if not all(len(df) == 0
-                             for df in h._dataframes) else pd.DataFrame())
-        for h in self.hypotheses
+      col = 'runs' if individual_runs else 'hypothesis'
+      df = pd.DataFrame({'hypothesis': entries})
+
+    def _mean(h):
+      return h.mean() if isinstance(h, Hypothesis) else h.df
+
+    rows: List[pd.DataFrame] = [
+        (_mean(h) if not all(len(df) == 0 for df in h._dataframes) \
+                  else pd.DataFrame())
+        for h in entries
     ]
 
-    index_name = (util.ensure_unique({h.index.name for h in hypo_means})
-                  or 'index')  # yapf: disable  # noqa: W503
+    index_name: str = (
+        util.ensure_unique({cast(str, h.index.name) for h in rows})
+        or 'index')  # yapf: disable  # noqa: W503
 
     if columns is None:
       if index_name not in self.columns:
@@ -1326,6 +1357,8 @@ class Experiment(Iterable[Hypothesis]):
         if len(series) == 0:
           # after dropna, no numeric types to aggregate?
           return np.nan
+        if series.dtype.kind == 'O':  # object, not a numeric type
+          return np.nan
         aggregate_fn = aggregate
         if not callable(aggregate_fn):
           aggregate_fn = aggregate[column]  # type: ignore
@@ -1334,7 +1367,7 @@ class Experiment(Iterable[Hypothesis]):
 
       return pd.Series(
           name=column,
-          data=[aggregate_h(df_series(hm)) for hm in hypo_means],
+          data=[aggregate_h(df_series(hm)) for hm in rows],
       )
 
     df = pd.concat(
