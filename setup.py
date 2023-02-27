@@ -115,7 +115,7 @@ install_requires = [
     'scipy',
     'typeguard>=2.6.1',
     'matplotlib>=3.0.0',
-    'pandas>=1.0',
+    'pandas>=1.3',
     'pyyaml>=6.0',
     'multiprocess>=0.70.12',
     'multiprocessing_utils==0.4',
