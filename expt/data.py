@@ -1195,9 +1195,11 @@ class Experiment(Iterable[Hypothesis]):
       h = cast(Hypothesis, h)
       h_summary: pd.DataFrame = h.summary(individual_runs=True)
       for j, column in enumerate(df.columns):
-        ttips.iloc[i, j] = r'\A'.join(
-            f' {r_val:.6g} ::: {r.path}' \
-            for r, r_val in zip(h.runs, h_summary[column]))
+        if column in h_summary:
+          ttips.iloc[i, j] = r'\A'.join(
+              f' {r_val:.6g} ::: {r.path}' \
+              for r, r_val in zip(h.runs, h_summary[column])
+          )
 
     df_styler = df_styler.set_tooltips(ttips)
 
