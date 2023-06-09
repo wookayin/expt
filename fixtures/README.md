@@ -51,7 +51,7 @@ Environment: Macbook Pro 2021 (M1 Pro), Python 3.11 (arm64). Single-threaded (no
 | `edge_cgan/egraph_edge_cgan_002`   | 176M   | 1601450 |     69 s  |    3.3 s  |
 | `edge_cgan/egraph_edge_cgan_003`   | 241M   | 2136493 |     92 s  |    5.0 s  |
 
-Overall, [rust (`RustTensorboardLogReader`) implementation](src/lib.rs) is **~20x** faster than the naive
+Overall, [rust (`RustTensorboardLogReader`) implementation][src/lib.rs] is **~20x** faster than the naive
 python (`TensorboardLogReader`) implementation.
 
 Note that this result does not include serialization overhead that might be quite significant in parallel (multiprocess) loading,
