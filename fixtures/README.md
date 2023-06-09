@@ -1,9 +1,11 @@
 Fixtures for Test and Benchmarks
 ================================
 
+This directory stores test/benchmark fixtures for fast tensorboard log parsing. See [data_loader_test.py] for the benchmarking code, and [data_loader.py] and [src/lib.rs] for the DataLoader implementations.
+
 ## Sample CSV data
 
-A tiny CSV file `./fixtures/sample_csv/progress.csv`, contains 50 rows.
+A tiny CSV file `./fixtures/sample_csv/progress.csv`, which contains 50 rows.
 
 ## Small tensorboard logs (37 MB, 4 runs)
 
@@ -49,7 +51,14 @@ Environment: Macbook Pro 2021 (M1 Pro), Python 3.11 (arm64). Single-threaded (no
 | `edge_cgan/egraph_edge_cgan_002`   | 176M   | 1601450 |     69 s  |    3.3 s  |
 | `edge_cgan/egraph_edge_cgan_003`   | 241M   | 2136493 |     92 s  |    5.0 s  |
 
-Overall, rust (`RustTensorboardLogReader`) implementation is **~20x** faster than
+Overall, [rust (`RustTensorboardLogReader`) implementation](src/lib.rs) is **~20x** faster than the naive
 python (`TensorboardLogReader`) implementation.
+
 Note that this result does not include serialization overhead that might be quite significant in parallel (multiprocess) loading,
-and that full data is loaded (i.e., no subsampling) with a subsequent conversion to `pd.DataFrame`.
+and assumes that data is loaded in full (i.e., no subsampling) with a subsequent conversion to `pd.DataFrame`.
+Parallel (multi-core) performance may vary.
+
+
+[data_loader_test.py]: https://github.com/wookayin/expt/blob/master/expt/data_loader_test.py#L406
+[data_loader.py]: https://github.com/wookayin/expt/blob/master/expt/data_loader.py
+[src/lib.rs]: https://github.com/wookayin/expt/blob/master/src/lib.rs
