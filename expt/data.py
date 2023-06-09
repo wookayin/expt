@@ -678,21 +678,21 @@ class Hypothesis(Iterable[Run]):
   def rolling(self, *args, **kwargs):
     return self.grouped.rolling(*args, **kwargs)
 
-  def mean(self, *args, **kwargs) -> pd.DataFrame:
+  def mean(self, *args, numeric_only=True, **kwargs) -> pd.DataFrame:
     g = self.grouped
-    return g.mean(*args, **kwargs)  # type: ignore
+    return g.mean(*args, numeric_only=numeric_only, **kwargs)
 
-  def std(self, *args, **kwargs) -> pd.DataFrame:
+  def std(self, *args, numeric_only=True, **kwargs) -> pd.DataFrame:
     g = self.grouped
-    return g.std(*args, **kwargs)  # type: ignore
+    return g.std(*args, numeric_only=numeric_only, **kwargs)
 
-  def min(self, *args, **kwargs) -> pd.DataFrame:
+  def min(self, *args, numeric_only=True, **kwargs) -> pd.DataFrame:
     g = self.grouped
-    return g.min(*args, **kwargs)  # type: ignore
+    return g.min(*args, numeric_only=numeric_only, **kwargs)
 
-  def max(self, *args, **kwargs) -> pd.DataFrame:
+  def max(self, *args, numeric_only=True, **kwargs) -> pd.DataFrame:
     g = self.grouped
-    return g.max(*args, **kwargs)  # type: ignore
+    return g.max(*args, numeric_only=numeric_only, **kwargs)
 
   def resample(self,
                x_column: Optional[str] = None,
@@ -870,7 +870,7 @@ class Experiment(Iterable[Hypothesis]):
         'name': list(self._hypotheses.keys()),
         'hypothesis': list(self._hypotheses.values()),
         **{  # config keys (will be index)
-            k: [(h.config or {}).get(k) for h in self._hypotheses.values()] \
+            k: [(h.config or {}).get(k) for h in self._hypotheses.values()]                    \
             for k in self._config_keys
         },
     })
@@ -1332,8 +1332,11 @@ class Experiment(Iterable[Hypothesis]):
       col = 'runs' if individual_runs else 'hypothesis'
       df = pd.DataFrame({'hypothesis': entries})
 
-    def _mean(h):
-      return h.mean() if isinstance(h, Hypothesis) else h.df
+    def _mean(h) -> pd.DataFrame:
+      if isinstance(h, Hypothesis):
+        return h.mean()
+      else:
+        return h.df
 
     rows: List[pd.DataFrame] = [
         (_mean(h) if not all(len(df) == 0 for df in h._dataframes) \

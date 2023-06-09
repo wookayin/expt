@@ -446,6 +446,7 @@ class TestHypothesis(_TestBase):
     # the summary columns should include the name of index (`x`)
     # as well as other columns in the correct order
     assert list(df.columns) == ['name', 'x', 'y', 'z']
+    assert np.isnan(df['z']).all()
 
     # (3) individual_runs mode
     df = h.summary(individual_runs=True)
@@ -456,6 +457,7 @@ class TestHypothesis(_TestBase):
     # "x": [0, 2, 4, 6, 8]  or [1, 3, 5, 7, 9]
     np.testing.assert_array_almost_equal(df['x'].values, [8, 9])
     np.testing.assert_array_almost_equal(df['y'].values, [16, 19])
+    assert np.isnan(df['z']).all()
 
   def test_resample(self):
     h: Hypothesis = self._fixture()
