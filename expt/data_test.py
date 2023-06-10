@@ -555,6 +555,16 @@ class TestHypothesis(_TestBase):
 
 class TestExperiment(_TestBase):
 
+  def test_create_simple(self):
+    ex = Experiment("only_name")
+    assert len(ex.hypotheses) == 0
+    assert ex.name == "only_name"
+
+    h = TestHypothesis._fixture()
+    ex = Experiment("one_hypo", [h])
+    assert len(ex.hypotheses) == 1
+    assert ex.name == "one_hypo"
+
   def test_create_from_dataframe_run(self, runs_gridsearch: RunList):
     """Tests Experiment.from_dataframe with the minimal defaults."""
 

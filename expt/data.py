@@ -870,7 +870,7 @@ class Experiment(Iterable[Hypothesis]):
         'name': list(self._hypotheses.keys()),
         'hypothesis': list(self._hypotheses.values()),
         **{  # config keys (will be index)
-            k: [(h.config or {}).get(k) for h in self._hypotheses.values()]                    \
+            k: [(h.config or {}).get(k) for h in self._hypotheses.values()]
             for k in self._config_keys
         },
     })
