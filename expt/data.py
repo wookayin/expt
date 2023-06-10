@@ -651,7 +651,7 @@ class Experiment(Iterable[Hypothesis]):
   def __init__(
       self,
       name: Optional[str] = None,
-      hypotheses: Iterable[Hypothesis] = None,
+      hypotheses: Iterable[Hypothesis] = (),
   ):
     self._name = name if name is not None else ""
     self._hypotheses: MutableMapping[str, Hypothesis]
