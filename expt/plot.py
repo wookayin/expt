@@ -295,7 +295,8 @@ class HypothesisPlotter:
                suptitle: Optional[str] = None,
                grid: Optional[GridPlot] = None,
                ax: Optional[Union[Axes, np.ndarray]] = None,
-               tight_layout: bool = True,
+               tight_layout: Union[bool, Dict[str, Any]] = True,
+               rasterized: bool = False,
                **kwargs) -> GridPlot:
     '''Hypothesis.plot based on matplotlib.
 
@@ -356,6 +357,12 @@ class HypothesisPlotter:
           Note that this is mutually exclusive with `grid`.
       - grid (GridPlot): A `GridPlot` instance (optional) to use for
           matplotlib figure and axes. If this is given, `ax` must be None.
+      - tight_layout (bool | dict): Applies to Figure. see fig.tight_layout()
+      - rasterized (bool): Applies to Figure. If true, rasterize vector
+          graphics into raster images, when drawing the plot to produce smaller
+          file size when the number of data points is large (e.g., >= 10K),
+          which could be loaded much faster when saved as a PDF image (savefig).
+          Highly recommend to use fig.set_dpi(...) for a good image quality.
 
     All other kwargs is passed to DataFrame.plot(). For example, you may
     find the following parameters useful:
@@ -522,6 +529,7 @@ class HypothesisPlotter:
         grid=grid,
         ax=ax,
         tight_layout=tight_layout,
+        rasterized=rasterized,
         args=args,  # type: ignore
         kwargs=kwargs)  # type: ignore
 
@@ -555,6 +563,7 @@ class HypothesisPlotter:
       grid: Optional[GridPlot] = None,
       ax: Optional[Union[Axes, np.ndarray]] = None,
       tight_layout: Union[bool, Dict[str, Any]] = True,
+      rasterized: bool = False,
       args: List,
       kwargs: Dict,
   ) -> GridPlot:
@@ -618,7 +627,8 @@ class HypothesisPlotter:
     else:
       kwargs['legend'] = bool(legend)
 
-    axes = representative.plot(*args, subplots=subplots, ax=ax, **kwargs)
+    axes = representative.plot(
+        *args, subplots=subplots, ax=ax, rasterized=rasterized, **kwargs)
 
     if err_style not in self.KNOWN_ERR_STYLES:
       raise ValueError(f"Unknown err_style '{err_style}', "
@@ -637,7 +647,9 @@ class HypothesisPlotter:
                         err_range[0][yi].values,
                         err_range[1][yi].values,
                         color=mean_line.get_color(),
-                        alpha=std_alpha)  # yapf: disable
+                        alpha=std_alpha,
+                        rasterized=rasterized,
+                        )  # yapf: disable
 
     elif err_style in ('runs', 'unit_traces') and len(self.runs) > 1:
       # show individual runs
@@ -719,6 +731,7 @@ class HypothesisHvPlotter(HypothesisPlotter):
       ax=None,
       grid=None,
       tight_layout: bool = True,
+      rasterized: bool = True,
       args: List,
       kwargs: Dict,
   ):
