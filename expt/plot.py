@@ -10,6 +10,7 @@ import warnings
 
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+import matplotlib.legend
 import matplotlib.ticker
 import numpy as np
 import pandas as pd
@@ -225,7 +226,7 @@ class GridPlot:
 
     # TODO: Customize how to sort legend items.
     legend_handles, legend_labels = zip(
-        *[(h, l) for (l, h) in sorted(self._collect_legend().items())])
+        *[(h, label) for (label, h) in sorted(self._collect_legend().items())])
     if labels is not None:
       if len(labels) != len(legend_labels):
         raise ValueError(
@@ -283,8 +284,8 @@ class HypothesisPlotter:
                *args,
                subplots=True,
                err_style="runs",
-               err_fn: Optional[HypothesisSummaryFn] = None,
-               representative_fn: Optional[HypothesisSummaryErrFn] = None,
+               err_fn: Optional[HypothesisSummaryErrFn] = None,
+               representative_fn: Optional[HypothesisSummaryFn] = None,
                std_alpha=0.2,
                runs_alpha=0.2,
                n_samples=None,
@@ -385,8 +386,10 @@ class HypothesisPlotter:
     ]:  # yapf: disable
       """Evaluate representative_fn and err_fn."""
 
-      representative = representative_fn(h) if representative_fn \
-                       else h.grouped.mean()
+      representative: pd.DataFrame = (
+          representative_fn(h) if representative_fn \
+          else cast(pd.DataFrame, h.grouped.mean())
+      )
       err_range: Tuple[pd.DataFrame, pd.DataFrame]
       std = err_fn(h) if err_fn else h.grouped.std()
 
@@ -496,7 +499,7 @@ class HypothesisPlotter:
               "Use ignore_unknown=True to ignore unknown columns.")
 
       # include only numeric values (integer or float)
-      if not (dtypes[col_name].kind in ('i', 'f')):
+      if dtypes[col_name].kind not in ('i', 'f'):
         return False
       return True
 
@@ -636,7 +639,7 @@ class HypothesisPlotter:
 
     if err_style in ('band', 'fill'):
       # show shadowed range of 1-std errors
-      for ax, yi in zip(np.asarray(axes).flat, y):
+      for ax, yi in zip(np.asarray(axes).flat, y):  # type: ignore
         if yi not in err_range[0] or yi not in err_range[1]:
           continue
         ax = cast(Axes, ax)
@@ -653,7 +656,7 @@ class HypothesisPlotter:
 
     elif err_style in ('runs', 'unit_traces') and len(self.runs) > 1:
       # show individual runs
-      for ax, yi in zip(np.asarray(axes).flat, y):
+      for ax, yi in zip(np.asarray(axes).flat, y):  # type: ignore
         ax = cast(Axes, ax)
         x = kwargs.get('x', None)
         color = ax.get_lines()[-1].get_color()
