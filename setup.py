@@ -60,55 +60,6 @@ except ImportError as ex:
                     "setuptools_scm>=8.0 needs to be installed manually. "
                     "Or consider running `pip install -e .` instead.") from ex
 
-
-# brought from https://github.com/kennethreitz/setup.py
-class DeployCommand(Command):
-  description = 'Build and deploy the package to PyPI.'
-  user_options = []
-
-  def initialize_options(self):
-    pass
-
-  def finalize_options(self):
-    pass
-
-  @staticmethod
-  def status(s):
-    print(s)
-
-  def run(self):
-    import twine  # we require twine locally  # noqa
-
-    assert 'dev' not in __version__, ("Only non-devel versions are allowed. "
-                                      "__version__ == {}".format(__version__))
-
-    with os.popen("git status --short") as fp:
-      git_status = fp.read().strip()
-      if git_status:
-        print("Error: git repository is not clean.\n")
-        os.system("git status --short")
-        sys.exit(1)
-
-    try:
-      self.status('Removing previous builds ...')
-      shutil.rmtree(os.path.join(__PATH__, 'dist'))
-    except OSError:
-      pass
-
-    self.status('Building Source and Wheel (universal) distribution ...')
-    os.system('{0} setup.py sdist'.format(sys.executable))
-
-    self.status('Uploading the package to PyPI via Twine ...')
-    ret = os.system('twine upload dist/*')
-    if ret != 0:
-      sys.exit(ret)
-
-    self.status('Creating git tags ...')
-    os.system('git tag v{0}'.format(__version__))
-    os.system('git tag --list')
-    sys.exit()
-
-
 install_requires = [
     'numpy>=1.16.5',
     'scipy',
@@ -192,7 +143,6 @@ setup(
         #'console_scripts': ['expt=expt:main'],
     },
     cmdclass={
-        'deploy': DeployCommand,
         'build_rust': build_rust_for_expt,
     },  # type: ignore
     include_package_data=True,
