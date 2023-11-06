@@ -5,6 +5,12 @@ import os
 import shutil
 import sys
 import textwrap
+import warnings
+
+warnings.filterwarnings(
+    "ignore", category=UserWarning, module='setuptools',
+    message="setuptools.installer and fetch_build_eggs are deprecated."
+) # yapf: disable
 
 from setuptools import Command
 from setuptools import setup
