@@ -129,7 +129,7 @@ tests_requires = [
     'pytest-asyncio',
     # Optional dependencies.
     'tensorboard>=2.3',
-    'fabric~=2.6',
+    'fabric>=3.0',
     'paramiko>=2.8',
 ]
 
