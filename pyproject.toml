@@ -1,5 +1,10 @@
 [build-system]
-requires = ["setuptools >= 64.0", "setuptools_scm[toml]>=6.2", "wheel", "setuptools-rust"]
+requires = [
+    "setuptools >= 64.0",
+    "setuptools_scm[toml]>=6.2",
+    "wheel",
+    "setuptools-rust",
+]
 
 [tool.isort]
 # https://pycqa.github.io/isort/docs/configuration/options.html
@@ -9,11 +14,11 @@ extra_standard_library = ['typing_extensions']
 
 [tool.pytest.ini_options]
 markers = [
-  "slow: marks tests as slow (runnable with --run-slow)",
-  "benchmark: benchmark tests, report elapsed time",
-  "serial",
+    "slow: marks tests as slow (runnable with --run-slow)",
+    "benchmark: benchmark tests, report elapsed time",
+    "serial",
 ]
 filterwarnings = [
-  "ignore:Call to deprecated create function .*Descriptor:DeprecationWarning",
-  "ignore:.*is deprecated and will be removed in Pillow 10:DeprecationWarning",
+    "ignore:Call to deprecated create function .*Descriptor:DeprecationWarning",
+    "ignore:.*is deprecated and will be removed in Pillow 10:DeprecationWarning",
 ]
