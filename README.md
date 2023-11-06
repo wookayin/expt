@@ -34,4 +34,4 @@ pip install git+https://github.com/wookayin/expt@master        # Latest developm
 License
 -------
 
-MIT License (c) 2019-2022 Jongwook Choi
+MIT License (c) 2019-2023 Jongwook Choi

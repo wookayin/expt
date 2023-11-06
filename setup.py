@@ -169,7 +169,6 @@ setup(
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
         'Operating System :: POSIX :: Linux',
-        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
@@ -177,6 +176,7 @@ setup(
         'Topic :: Utilities',
         'Topic :: Scientific/Engineering',
     ],
+    python_requires='>=3.8',
     packages=['expt'],
     rust_extensions=[
         RustExtension("expt._internal", binding=Binding.PyO3, \
@@ -196,5 +196,4 @@ setup(
     },  # type: ignore
     include_package_data=True,
     zip_safe=False,
-    python_requires='>=3.7',
 )

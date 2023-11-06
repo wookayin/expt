@@ -1,9 +1,9 @@
 [build-system]
 requires = [
     "setuptools >= 64.0",
-    "setuptools_scm[toml]==7.1.0", # Python 3.7 support
+    "setuptools_scm[toml]>=8.0",
     "wheel",
-    "setuptools-rust==1.7.0",      # Python 3.7 support
+    "setuptools-rust",
 ]
 
 [tool.setuptools_scm]

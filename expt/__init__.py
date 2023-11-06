@@ -5,8 +5,8 @@
 
 import sys
 
-if sys.version_info < (3, 7):
-  raise RuntimeError("This library requires python 3.7+.")
+if sys.version_info < (3, 8):
+  raise RuntimeError("This library requires python 3.8+.")
 
 try:
   from ._version import version as __version__
