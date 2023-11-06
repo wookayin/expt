@@ -289,7 +289,7 @@ class HypothesisPlotter:
                std_alpha=0.2,
                runs_alpha=0.2,
                n_samples=None,
-               rolling=None,
+               rolling: Union[int, dict, None] = None,
                ignore_unknown: bool = False,
                legend: Union[bool, int, str, Dict[str, Any]] = False,
                prettify_labels: bool = False,
@@ -306,7 +306,11 @@ class HypothesisPlotter:
     (2) Plot (several or all) columns in a single axesplot (subplots=False)
 
     Additional keyword arguments:
-      - rolling (int): A window size for rolling and smoothing.
+      - rolling (int, dict, or None): If given (i.e. not None), use a rolling
+        window for smoothing. By default the rolling window is centered. The
+        integer value can represent the window size for rolling and smoothing.
+        If it's a dict, it will be kwargs to the DataFrame.rolling();
+        e.g. rolling = {"center": True, "window": 10}
       - n_samples (int): If given, we subsample using n_samples number of
           equidistant points over the x axis. Values will be interpolated.
       - legend (bool, int, str, or dict):
@@ -506,10 +510,10 @@ class HypothesisPlotter:
     y = [yi for yi in y if _should_include_column(yi)]
 
     if rolling:
-      representative = representative.rolling(
-          rolling, min_periods=1, center=True).mean()
-      err = (err[0].rolling(rolling, min_periods=1, center=True).mean(),
-             err[1].rolling(rolling, min_periods=1, center=True).mean())
+      rolling_kwargs = _rolling_kwargs(rolling)
+      representative = representative.rolling(**rolling_kwargs).mean()
+      err = (err[0].rolling(**rolling_kwargs).mean(),
+             err[1].rolling(**rolling_kwargs).mean())
 
     # suptitle: defaults to hypothesis name if ax/grid was not given
     if suptitle is None and (ax is None and grid is None):
@@ -556,7 +560,7 @@ class HypothesisPlotter:
       _h_interpolated: Optional[Hypothesis] = None,  # type: ignore
       n_samples: Optional[int],
       subplots: bool,
-      rolling: Optional[int],
+      rolling: Union[int, dict, None],
       err_style: Optional[str],
       std_alpha: float,
       runs_alpha: float,
@@ -670,8 +674,7 @@ class HypothesisPlotter:
           if yi not in df:
             continue
           if rolling:
-            df = df.rolling(rolling, min_periods=1,
-                            center=True).mean()  # yapf: disable
+            df = df.rolling(**_rolling_kwargs(rolling)).mean()
 
           # Note: the series may have nan (missing) values.
           df_yi = df[[x, yi]] if x is not None else df[yi]
@@ -1061,6 +1064,16 @@ def _add_suptitle(fig, suptitle, fontsize='x-large', y=1.02, **kwargs):
     fig.suptitle(**suptitle)
   else:
     raise TypeError("Expected str or dict for suptitle: {}".format(suptitle))
+
+
+def _rolling_kwargs(rolling: Union[int, Dict[str, Any]]) -> Dict[str, Any]:
+  defaults = dict(min_periods=1, center=True)
+  if isinstance(rolling, dict):
+    if 'window' not in rolling:
+      raise ValueError("rolling.window must not be None")
+    return {**defaults, **rolling}
+  else:  # int
+    return {'window': rolling, **defaults}
 
 
 # yapf: disable
