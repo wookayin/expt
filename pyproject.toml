@@ -1,10 +1,12 @@
 [build-system]
 requires = [
     "setuptools >= 64.0",
-    "setuptools_scm[toml]>=6.2",
+    "setuptools_scm[toml]>=8.0",
     "wheel",
     "setuptools-rust",
 ]
+
+[tool.setuptools_scm]
 
 [tool.isort]
 # https://pycqa.github.io/isort/docs/configuration/options.html

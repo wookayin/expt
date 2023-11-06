@@ -57,15 +57,8 @@ try:
   import setuptools_scm
 except ImportError as ex:
   raise ImportError("setuptools_scm not found. When running setup.py directly, "
-                    "setuptools_scm needs to be installed manually. "
+                    "setuptools_scm>=8.0 needs to be installed manually. "
                     "Or consider running `pip install -e .` instead.") from ex
-
-
-def read_version():
-  return setuptools_scm.get_version()
-
-
-__version__ = read_version()
 
 
 # brought from https://github.com/kennethreitz/setup.py
@@ -158,7 +151,7 @@ def next_semver(version: setuptools_scm.version.ScmVersion):
 
 setup(
     name='expt',
-    version=__version__,
+    # version=__version__,  # setuptools_scm sets version automatically
     use_scm_version=dict(
         write_to='expt/_version.py',
         version_scheme=next_semver,
