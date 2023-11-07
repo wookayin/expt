@@ -925,9 +925,22 @@ class Experiment(Iterable[Hypothesis]):
     )
 
     if summary_columns:
-      df = df[['hypothesis', *summary_columns]]
+      try:
+        df = df[['hypothesis', *summary_columns]]
+      except KeyError:
+        # summary_columns often have many mistakes or missing keys,
+        # so let the error message more informative.
+        missing_cols = [col for col in summary_columns if col not in df.keys()]
+        suggestions = [
+            difflib.get_close_matches(col, df.keys()) for col in missing_cols
+        ]
+        linesep = '\n'
+        raise KeyError(
+            f"Some columns do not exist in the dataframe: {missing_cols}. "
+            f"Close matches = {linesep.join(str(s) for s in suggestions)}"
+        ) from None
 
-    return cls.from_dataframe(df, name=name)
+    return cls.from_dataframe(cast(pd.DataFrame, df), name=name)
 
   @classmethod
   def from_dataframe(
