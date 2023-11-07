@@ -519,6 +519,10 @@ class HypothesisPlotter:
     if suptitle is None and (ax is None and grid is None):
       suptitle = self._parent.name
 
+    # Merge with hypothesis's default style
+    if self._parent.style:
+      kwargs = {**self._parent.style, **kwargs}
+
     return self._do_plot(
         y,
         representative,  # type: ignore
@@ -950,7 +954,8 @@ class ExperimentPlotter:
         y = [yi for yi in y if yi != kwargs['x']]
       kwargs['y'] = y
 
-    # Line style for each hypothesis.
+    # Assign line style for each hypothesis
+    # TODO: avoid conflicts as much as we can against hypothosis.style
     axes_cycle = matplotlib.rcParams['axes.prop_cycle']()  # type: ignore
     axes_props = list(itertools.islice(axes_cycle, len(self._hypotheses)))
     for key in list(axes_props[0].keys()):
@@ -995,22 +1000,29 @@ class ExperimentPlotter:
     given_ax_or_grid = ('ax' in kwargs) or (grid is not None)
 
     for i, (name, hypo) in enumerate(self._hypotheses.items()):
+      h_kwargs = kwargs.copy()
+      if grid is not None:
+        h_kwargs.pop('ax', None)  # i=0: ax, i>0: grid
+
       if isinstance(y, str):
         # display different hypothesis over subplots:
-        kwargs['label'] = hypothesis_labels[i]
-        kwargs['subplots'] = False
+        h_kwargs['label'] = hypothesis_labels[i]
+        h_kwargs['subplots'] = False
         if 'title' not in kwargs:
-          kwargs['title'] = y  # column name
+          h_kwargs['title'] = y  # column name
 
       else:
         # display multiple columns over subplots:
         if y is not None:
-          kwargs['label'] = [f'{y_i} ({name})' for y_i in y]
-          if kwargs.get('prettify_labels', False):
-            kwargs['label'] = util.prettify_labels(kwargs['label'])
-        kwargs['subplots'] = True
+          h_kwargs['label'] = [f'{y_i} ({name})' for y_i in y]
+          if h_kwargs.get('prettify_labels', False):
+            h_kwargs['label'] = util.prettify_labels(h_kwargs['label'])
+        h_kwargs['subplots'] = True
 
-      kwargs.update(axes_props[i])  # e.g. color, linestyle, etc.
+      h_kwargs.update(axes_props[i])  # e.g. color, linestyle, etc.
+
+      # Hypothesis' own style should take more priority
+      h_kwargs.update(hypo.style)
 
       # exclude the hypothesis if it has no runs in it
       if hypo.empty():
@@ -1018,14 +1030,14 @@ class ExperimentPlotter:
                       "ignoring it", UserWarning)
         continue
 
-      kwargs['tight_layout'] = False
-      kwargs['ignore_unknown'] = True
-      kwargs['suptitle'] = ''  # no suptitle for each hypo
+      h_kwargs['tight_layout'] = False
+      h_kwargs['ignore_unknown'] = True
+      h_kwargs['suptitle'] = ''  # no suptitle for each hypo
 
-      grid = hypo.plot(*args, grid=grid, **kwargs)  # on the same ax(es)?
+      grid = hypo.plot(*args, grid=grid, **h_kwargs)  # on the same ax(es)?
       assert grid is not None
 
-      kwargs.pop('ax', None)  # From now on, grid.axes will be used
+    assert grid is not None  # True if len(hypothesis) > 0
 
     # corner case: if there is only one column, use it as a label
     if len(grid.axes_active) == 1 and isinstance(y, str):

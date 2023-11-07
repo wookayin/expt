@@ -501,6 +501,7 @@ class Hypothesis(Iterable[Run]):
   """
   name: str
   runs: RunList
+  style: Dict[str, Any]  # TODO: Use some typing. TODO: Add tests.
   config: Optional[RunConfig] = None
 
   @typechecked
@@ -509,6 +510,7 @@ class Hypothesis(Iterable[Run]):
       name: str,
       runs: Union[Run, Iterable[Run]],
       *,
+      style: Optional[Dict[str, Any]] = None,
       config: Union[RunConfig, Literal['auto'], None] = 'auto',
   ):
     """Create a new Hypothesis object.
@@ -516,6 +518,8 @@ class Hypothesis(Iterable[Run]):
     Args:
       name: The name of the hypothesis. Should be unique within an Experiment.
       runs: The underlying runs that this hypothesis consists of.
+      style: (optional) A dict that represents preferred style for plotting.
+        These will be passed as kwargs to plot().
       config: A config dict that describes the configuration of the hypothesis.
         A config is optional, where `config` is explicitly set to be `None`.
         If config exists (not None), it should represent the config this
@@ -549,6 +553,7 @@ class Hypothesis(Iterable[Run]):
                              r.name for r in self.runs if r.config is None))
 
     self.config = config
+    self.style = {**style} if style is not None else {}
 
   def __iter__(self) -> Iterator[Run]:
     return iter(self.runs)
