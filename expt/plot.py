@@ -961,8 +961,8 @@ class ExperimentPlotter:
 
     if 'color' not in axes_props[0].keys():
       # axes.prop_cycle does not have color. Fall back to default colors
-      from .colors import DefaultColors
-      color_it = itertools.cycle(DefaultColors)
+      from .colors import ExptSensible17
+      color_it = itertools.cycle(ExptSensible17)
       for prop, c in zip(axes_props, color_it):
         prop['color'] = c
 

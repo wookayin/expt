@@ -467,7 +467,7 @@ class TestExperimentPlot:
 
     # if color is missing, we fall back to a default color palette
     axprop = cycler.cycler(linestyle=['-', '--'])
-    default_colors = expt.colors.DefaultColors
+    default_colors = expt.colors.ExptSensible17
     with matplotlib_rcparams({'axes.prop_cycle': axprop}):
       g = ex.plot()
       for ax in g.axes_active:
