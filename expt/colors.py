@@ -8,7 +8,13 @@ _thismodule = sys.modules[__name__]
 # https://matplotlib.org/examples/color/named_colors.html
 from matplotlib import colors as mcolors
 
-_colors = dict(mcolors.BASE_COLORS, **mcolors.CSS4_COLORS)
+_colors = {}
+_colors.update(mcolors.BASE_COLORS)
+_colors.update(mcolors.CSS4_COLORS)
+_colors.update({
+    k.replace(':', '_'): v  # e.g., tab:blue -> tab_blue
+    for k, v in mcolors.TABLEAU_COLORS.items()
+})
 
 for color_name in _colors:
   setattr(_thismodule, color_name, color_name)
