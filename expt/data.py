@@ -28,7 +28,6 @@ from __future__ import annotations
 import collections
 import copy
 import dataclasses
-from dataclasses import dataclass
 import difflib
 import fnmatch
 from importlib import import_module as _import
@@ -63,7 +62,7 @@ else:
 RunConfig = Mapping[str, Any]
 
 
-@dataclass
+@dataclasses.dataclass
 class Run:
   """Represents a single run, containing one pd.DataFrame object
   as well as other metadata (path, config, etc.)
@@ -493,8 +492,13 @@ def varied_config_keys(
   return keys
 
 
-@dataclass
+@dataclasses.dataclass
 class Hypothesis(Iterable[Run]):
+  """Represents a single Hypothesis.
+
+  A Hypothesis a group of runs with the same configuration; can represent a
+  variant, algorithm, or such an instance with a specific set of hyperparamters.
+  """
   name: str
   runs: RunList
   config: Optional[RunConfig] = None
