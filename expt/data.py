@@ -866,11 +866,13 @@ class Experiment(Iterable[Hypothesis]):
 
   @property
   def _df(self) -> pd.DataFrame:
+    hypotheses: List[Hypothesis] = list(self._hypotheses.values())
+
     df = pd.DataFrame({
-        'name': list(self._hypotheses.keys()),
-        'hypothesis': list(self._hypotheses.values()),
+        'name': [h.name for h in hypotheses],
+        'hypothesis': hypotheses,
         **{  # config keys (will be index)
-            k: [(h.config or {}).get(k) for h in self._hypotheses.values()]
+            k: [(h.config or {}).get(k) for h in hypotheses]
             for k in self._config_keys
         },
     })

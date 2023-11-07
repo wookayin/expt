@@ -1,5 +1,6 @@
 """Tests for expt.data"""
 # pylint: disable=redefined-outer-name
+# pylint: disable=protected-access
 
 import itertools
 import re
@@ -679,9 +680,21 @@ class TestExperiment(_TestBase):
     ]
     assert [ex.hypotheses[i].name for i in range(6)] == hypothesis_names
 
+    # Use custom name for some hypotheses
+    for h in ex.hypotheses:
+      assert h.config is not None
+      h.name = f"{h.config['algo']} ({h.config['env_id']})"
+
     # Because df already has a multi-index, so should ex.
     assert ex._df.index.names == ['algo', 'env_id', 'name']  # Note the order
-    assert list(ex._df.index.get_level_values('name')) == hypothesis_names
+    assert list(ex._df.index.get_level_values('name')) == [
+        'ppo (halfcheetah)',
+        'ppo (hopper)',
+        'ppo (humanoid)',
+        'sac (halfcheetah)',
+        'sac (hopper)',
+        'sac (humanoid)',
+    ]
     assert list(ex._df.index.get_level_values('algo')) == (  # ...
         ['ppo'] * 3 + ['sac'] * 3)
     assert list(ex._df.index.get_level_values('env_id')) == (
