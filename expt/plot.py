@@ -396,10 +396,10 @@ class HypothesisPlotter:
 
       representative: pd.DataFrame = (
           representative_fn(h) if representative_fn \
-          else cast(pd.DataFrame, h.grouped.mean())
+          else cast(pd.DataFrame, h.mean(numeric_only=True))
       )
       err_range: Tuple[pd.DataFrame, pd.DataFrame]
-      std = err_fn(h) if err_fn else h.grouped.std()
+      std = err_fn(h) if err_fn else h.std(numeric_only=True)
 
       # Condition check: when representative_fn is given,
       # err_fn should return a range (i.e., tuple)
@@ -412,7 +412,7 @@ class HypothesisPlotter:
             f"err_fn returned: {std}")
 
       if isinstance(std, pd.DataFrame):
-        mean = h.grouped.mean()
+        mean = h.mean(numeric_only=True)
         err_range = (mean - std, mean + std)
         return representative, err_range
 
@@ -438,7 +438,7 @@ class HypothesisPlotter:
       # might have different x values --- we need to interpolate.
       # (i) check if the x-column is consistent?
       x = kwargs['x']
-      if n_samples is None and np.any(self._parent.grouped.nunique()[x] > 1):
+      if n_samples is None and np.any(self._parent.grouped[x].nunique() > 1):
         warnings.warn(
             f"The x value (column `{x}`) is not consistent "
             "over different runs. Automatically falling back to the "
@@ -496,6 +496,15 @@ class HypothesisPlotter:
       if not col_name:  # empty name
         return False
 
+      # include only numeric values (integer or float).
+      # (check from the originial hypothesis dataframe, not from representative)
+      for df in self._dataframes:
+        if col_name in df and df[col_name].dtype.kind not in ('i', 'f'):
+          if not _use_default_y:
+            raise ValueError(f"Invalid y: the column `{col_name}` "
+                             f"has a non-numeric type: {df[col_name].dtype}.")
+          return False
+
       # unknown column in the DataFrame
       # Note that additional extra_y columns are also accepted
       if col_name not in representative.columns:
@@ -507,13 +516,6 @@ class HypothesisPlotter:
               f"Available columns: {list(representative.columns)}; " +
               "Use ignore_unknown=True to ignore unknown columns.")
 
-      # include only numeric values (integer or float)
-      dtypes: Dict[str, Any] = representative.dtypes.to_dict()
-      if dtypes[col_name].kind not in ('i', 'f'):
-        if not _use_default_y:
-          raise ValueError(f"Invalid y: the column `{col_name}` "
-                           f"has a non-numeric type: {dtypes[col_name]}.")
-        return False
       return True
 
     # Exclude non-numeric types that cannot be plotted or interpolated
