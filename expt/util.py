@@ -5,7 +5,7 @@ import collections
 import concurrent.futures
 import contextlib
 import functools
-from typing import Callable, Collection, List, TypeVar
+from typing import Callable, Collection, List, Optional, TypeVar
 import warnings
 
 from typeguard import typechecked
@@ -69,6 +69,11 @@ def ensure_unique(items: Collection[T]) -> T:
     return next(iter(s))
 
   raise ValueError("`items` contains non-unique values: {s}")
+
+
+def ensure_notNone(x: Optional[T]) -> T:
+  assert x is not None
+  return x
 
 
 # Fallback for tqdm.

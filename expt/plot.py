@@ -384,6 +384,10 @@ class HypothesisPlotter:
       # nothing to draw (no rows)
       raise ValueError("No data to plot, all runs have empty DataFrame.")
 
+    #
+    ## STEP 1. Prepare data (mean ± std)
+    #
+
     def _representative_and_err(h: Hypothesis) -> Tuple[
         pd.DataFrame,  # representative (mean)
         Tuple[pd.DataFrame, pd.DataFrame]  # error band range (stderr)
@@ -423,9 +427,9 @@ class HypothesisPlotter:
                        f"got {type(std)}")
 
     NULL = pd.DataFrame()
-    representative = NULL
-    err = (NULL, NULL)
-    _h_interpolated = None
+    representative: pd.DataFrame = NULL
+    err: Tuple[pd.DataFrame, pd.DataFrame] = (NULL, NULL)
+    _h_interpolated: Optional[Hypothesis] = None
 
     if 'x' not in kwargs:
       # index (same across runs) being x value, so we can simply average
@@ -460,18 +464,18 @@ class HypothesisPlotter:
       raise TypeError("representative_fn should return a pd.DataFrame, "
                       f"but got {type(err)}")
 
-    # there might be many NaN values if each column is being logged
-    # at a different period. We fill in the missing values.
-    representative = representative.interpolate()
-    assert representative is not None
-    err = (err[0].interpolate(), err[1].interpolate())
-    assert err[0] is not None and err[1] is not None
+    #
+    ## STEP 2. Determine y columns
+    #
 
     # determine which columns to draw (i.e. y) before smoothing.
     # should only include numerical values
-    y: Iterable[str] = kwargs.get('y', representative.columns)
+    _use_default_y: bool = 'y' not in kwargs
+    y: List[str] = kwargs.get('y', representative.columns)
     if isinstance(y, str):
       y = [y]
+    y = list(y)
+    # Always exclude the x-axis (if non-index)
     if 'x' in kwargs:
       y = [yi for yi in y if yi != kwargs['x']]
 
@@ -479,21 +483,22 @@ class HypothesisPlotter:
       raise TypeError("`y` contains one or more non-str argument(s).")
 
     if ignore_unknown:
-      # TODO(remove): this is hack to handle homogeneous column names
-      # over different hypotheses in a single of experiment, because it
-      # will end up adding dummy columns instead of ignoring unknowns.
+      # Add extra columns even if do not exist in the dataframe, if y is given.
+      # This is a hack to handle non-homogeneous column names in a single
+      # Experiment. see test_gridplot_basic() for a scenario.
       extra_y = set(y) - set(representative.columns)
       for yi in extra_y:
         representative[yi] = np.nan
+        err[0][yi] = np.nan
+        err[1][yi] = np.nan
 
     def _should_include_column(col_name: str) -> bool:
       if not col_name:  # empty name
         return False
 
       # unknown column in the DataFrame
-      assert representative is not None
-      dtypes = representative.dtypes.to_dict()  # type: ignore
-      if col_name not in dtypes:
+      # Note that additional extra_y columns are also accepted
+      if col_name not in representative.columns:
         if ignore_unknown:
           return False  # just ignore, no error
         else:
@@ -503,11 +508,35 @@ class HypothesisPlotter:
               "Use ignore_unknown=True to ignore unknown columns.")
 
       # include only numeric values (integer or float)
+      dtypes: Dict[str, Any] = representative.dtypes.to_dict()
       if dtypes[col_name].kind not in ('i', 'f'):
+        if not _use_default_y:
+          raise ValueError(f"Invalid y: the column `{col_name}` "
+                           f"has a non-numeric type: {dtypes[col_name]}.")
         return False
       return True
 
+    # Exclude non-numeric types that cannot be plotted or interpolated
     y = [yi for yi in y if _should_include_column(yi)]
+    _columns_to_keep = [*y]
+    if 'x' in kwargs:
+      _columns_to_keep.append(kwargs['x'])
+    representative = cast(pd.DataFrame, representative[_columns_to_keep])
+    err = (
+        cast(pd.DataFrame, err[0][_columns_to_keep]),
+        cast(pd.DataFrame, err[1][_columns_to_keep]),
+    )
+
+    #
+    ## STEP 3. Processing of data, such as interpolation and smoothing
+    #
+
+    # There might be many NaN values if each column is being logged
+    # at a different period. We fill in the missing values.
+    representative = util.ensure_notNone(representative.interpolate())
+    assert representative is not None
+    err = (util.ensure_notNone(err[0].interpolate()),
+           util.ensure_notNone(err[1].interpolate()))
 
     if rolling:
       rolling_kwargs = _rolling_kwargs(rolling)

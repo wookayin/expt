@@ -43,6 +43,10 @@ def matplotlib_rcparams(kwargs: dict):
       matplotlib.rcParams[k] = old_values[k]
 
 
+def _ax_titles(g: expt.plot.GridPlot):
+  return [ax.title.get_text() for ax in g.axes_active]
+
+
 # -----------------------------------------------------------------------------
 # Fixtures
 # pylint: disable=redefined-outer-name
@@ -60,6 +64,7 @@ def hypothesis() -> Hypothesis:
     data['loss'] += np.random.RandomState(seed).normal(0, 0.1, size=1000)  # pylint: disable=no-member  # noqa
     data['accuracy'] = (data['step'] / data['step'].max()) * max_accuracy
     data['lr'] = np.ones(1000) * 0.001
+    data['video'] = None  # dtype: object
     return data
 
   runs = [
@@ -126,6 +131,14 @@ class TestHypothesisPlot:
   # TODO: This test suite is incomplete. Add more tests.
 
   def test_plot_arg_y(self, hypothesis: Hypothesis):
+    # Default: all the numeric columns
+    g = hypothesis.plot()
+    assert _ax_titles(g) == ["step", "loss", "accuracy", "lr"]
+
+    g = hypothesis.plot(x="step")
+    assert _ax_titles(g) == ["loss", "accuracy", "lr"]  # should exclude x
+
+    # Explicitly pass y=...
     hypothesis.plot(y="loss")
     hypothesis.plot(y=("loss", "accuracy"))
     hypothesis.plot(y=["loss", "accuracy"])
@@ -133,6 +146,16 @@ class TestHypothesisPlot:
     hypothesis.plot(y=np.asarray(["loss", "accuracy"], dtype=object))
     with pytest.raises(TypeError):
       hypothesis.plot(y=np.asarray([["loss", "accuracy"]], dtype=object))
+
+    # The ignore_unknown option
+    with pytest.raises(ValueError, match="Unknown column name 'X'"):
+      hypothesis.plot(y=("loss", "accuracy", "X"))
+    g = hypothesis.plot(y=("loss", "accuracy", "X"), ignore_unknown=True)
+    assert _ax_titles(g) == ["loss", "accuracy", "X"]  # should include 'X'
+
+    # Should raise errors explicitly non numeric types
+    with pytest.raises(ValueError, match="`video` has a non-numeric type"):
+      hypothesis.plot(y=np.asarray(["loss", "video"], dtype=object))
 
   def test_grid_spec(self, hypothesis: Hypothesis):
     # single y
@@ -338,8 +361,8 @@ class TestExperimentPlot:
 
     # plot all known columns
     g = V(ex.plot())
+    assert _ax_titles(g) == ['a', 'b0', 'b1']
     assert g.axes.shape == (2, 2)
-    assert len(g.axes_active) == 3  # a, b0, b1
 
     # __getitem__ (str)
     # TODO: validate contents
