@@ -566,6 +566,9 @@ class TestExperiment(_TestBase):
     assert len(ex.hypotheses) == 1
     assert ex.name == "one_hypo"
 
+    assert ex._summary_columns is None
+    assert list(ex._df.columns) == ["hypothesis", "x", "y", "z"]
+
   def test_create_from_dataframe_run(self, runs_gridsearch: RunList):
     """Tests Experiment.from_dataframe with the minimal defaults."""
 
@@ -600,6 +603,9 @@ class TestExperiment(_TestBase):
     assert ex.name == "Exp.foobar"
     assert list(ex._df.index.names) == ['algo', 'name']  # Note the order
     # yapf: enable
+
+    # All other columns than by = "algo"
+    assert ex._summary_columns == ("env_id", "seed")
 
     # by: not exists?
     with pytest.raises(KeyError):  # TODO: Improve exception

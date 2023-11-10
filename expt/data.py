@@ -886,17 +886,23 @@ class Experiment(Iterable[Hypothesis]):
         },
     })
 
-    if self._summary_columns:
-      # TODO: h.summary is expensive and slow, cache it
+    def _append_summary(summary_columns):
+      nonlocal df
       df = pd.concat([
           df,
           pd.DataFrame({
               k: [
-                  h.summary(columns=self._summary_columns).loc[0, k]
+                  # TODO: h.summary is expensive and slow, cache it
+                  h.summary(columns=summary_columns).loc[0, k]
                   for h in self._hypotheses.values()
-              ] for k in self._summary_columns
+              ] for k in summary_columns
           }),
       ], axis=1)  # yapf: disable
+
+    if self._summary_columns is not None:
+      _append_summary(summary_columns=self._summary_columns)
+    else:
+      _append_summary(summary_columns=self.columns)
 
     # Need to sort index w.r.t the multi-index level hierarchy, because
     # the order of hypotheses being added is not guaranteed
