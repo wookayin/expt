@@ -14,6 +14,15 @@ profile = "google"
 known_third_party = []
 extra_standard_library = ['typing_extensions']
 
+[tool.yapf]
+# see https://github.com/google/yapf#knobs
+based_on_style = "yapf"
+indent_width = 2
+spaces_before_comment = 2
+
+[tool.yapfignore]
+ignore_patterns = []
+
 [tool.pytest.ini_options]
 markers = [
     "slow: marks tests as slow (runnable with --run-slow)",
