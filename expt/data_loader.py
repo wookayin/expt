@@ -10,6 +10,7 @@ from collections import defaultdict
 import contextlib
 import dataclasses
 import itertools
+import json
 import multiprocessing.pool
 import os
 import pathlib
@@ -657,6 +658,24 @@ class YamlConfigReader(ConfigReader):
     return d
 
 
+class JsonConfigReader(ConfigReader):
+  """Reads config.json from the log directory.
+
+  Raises FileNotFoundError if config can't be found."""
+
+  def __init__(
+      self,
+      config_filename: str = "config.json",
+  ):
+    self._config_filename = config_filename
+
+  def __call__(self, log_dir: LogDir) -> Optional[RunConfig]:
+    p = os.path.join(log_dir, self._config_filename)
+    with path_util.open(p) as fp:
+      d = json.load(fp)
+    return d
+
+
 class ConfigReaderComposite(ConfigReader):
 
   def __init__(self, config_readers: Sequence[ConfigReader]):
@@ -704,7 +723,11 @@ class RunLoader:
     self._reader_cls: Optional[Sequence[Type[LogReader]]] = reader_cls
 
     if config_reader is None:
-      config_reader = [YamlConfigReader()]
+      config_reader = [
+          # TODO allow customization of filename, or via factory
+          YamlConfigReader(),
+          JsonConfigReader(),
+      ]
     elif not isinstance(config_reader, Sequence):
       config_reader = [config_reader]
     self._config_reader: ConfigReader = ConfigReaderComposite(config_reader)
@@ -937,5 +960,6 @@ __all__ = (
     'RustTensorboardLogReader',
     'ConfigReader',
     'YamlConfigReader',
+    'JsonConfigReader',
     'RunLoader',
 )

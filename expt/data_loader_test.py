@@ -272,6 +272,15 @@ class TestConfigReader:
     with pytest.raises(FileNotFoundError):
       r(FIXTURE_PATH / "lr_1E-03,conv=1,fc=2")
 
+  def test_config_json(self):
+    r = data_loader.YamlConfigReader(config_filename="config.json")
+    cfg = r(FIXTURE_PATH / "sample_csv")
+    assert isinstance(cfg, dict)
+
+    assert cfg['name'] == 'sample_csv'
+    assert cfg['origin'] == 'json'
+    assert cfg['nested'] == {'foo': 1, 'bar': 2}
+
 
 class TestRunLoader:
   """Tests loading of multiple runs at once, in parallel."""
