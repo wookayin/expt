@@ -657,6 +657,10 @@ class YamlConfigReader(ConfigReader):
       d = yaml.load(fp, yaml.SafeLoader)
     return d
 
+  def __repr__(self):
+    typ = type(self)
+    return f"<{typ.__module__}.{typ.__qualname__}(config_filename='{self._config_filename}')>"
+
 
 class JsonConfigReader(ConfigReader):
   """Reads config.json from the log directory.
@@ -675,11 +679,24 @@ class JsonConfigReader(ConfigReader):
       d = json.load(fp)
     return d
 
+  def __repr__(self):
+    typ = type(self)
+    return f"<{typ.__module__}.{typ.__qualname__}(config_filename='{self._config_filename}')>"
+
 
 class ConfigReaderComposite(ConfigReader):
 
   def __init__(self, config_readers: Sequence[ConfigReader]):
-    self._config_readers = config_readers
+    self._config_readers = list(config_readers)
+
+  def __repr__(self):
+    typ = type(self)
+    return "".join([
+        f"<{typ.__module__}.{typ.__qualname__}[",
+        "\n" if self._config_readers else "",
+        *["  " + repr(reader) + ",\n" for reader in self._config_readers],
+        "]>",
+    ])
 
   def __call__(self, log_dir: LogDir) -> Optional[RunConfig]:
     for reader in self._config_readers:
